@@ -21,6 +21,12 @@
 
 #define LBR_MMAP_PAGES  16      /* 数据页数，必须为 2 的幂                 */
 #define MAX_LBR_ENTRIES 32      /* 硬件最多 32 条跳转记录                  */
+/*
+ * 跨模块跳转过滤阈值（字节）：主程序文本（0x55...）到 JIT stub / vDSO
+ * 页（0x7f...）的地址差可达 ~90 TB，会严重拉高 lbr_avg_span 均值。
+ * 64 KB 足以覆盖所有合法用户态循环体，同时过滤跨段伪影。
+ */
+#define LBR_SPAN_MAX    (64ULL * 1024)
 
 /* ── 模块私有状态 ─────────────────────────────────────────────────────────── */
 
@@ -139,12 +145,16 @@ void lbr_drain(lbr_stats_t *stats)
                     ring_read(tail + off, data, mask, &entry, sizeof(entry));
                     off += sizeof(entry);
 
-                    /* 跳转跨度 = |from - to|（字节绝对距离）*/
+                    /* 跳转跨度 = |from - to|（字节绝对距离）
+                     * 过滤超出 LBR_SPAN_MAX 的跨模块跳转（如主程序→JIT stub
+                     * 页或 vDSO 调用），其地址差可达数十 TB，会污染均值。 */
                     uint64_t span = (entry.from > entry.to)
                                     ? (entry.from - entry.to)
                                     : (entry.to   - entry.from);
-                    stats->total_span  += span;
-                    stats->entry_count++;
+                    if (span <= LBR_SPAN_MAX) {
+                        stats->total_span  += span;
+                        stats->entry_count++;
+                    }
                 }
             }
         }

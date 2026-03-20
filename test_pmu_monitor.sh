@@ -14,7 +14,7 @@ set -euo pipefail
 
 # ── 配置（支持通过环境变量从外部脚本覆盖）────────────────────────────────
 INTERVAL_MS="${INTERVAL_MS:-500}"               # pmu_monitor 采样间隔（毫秒）
-TEST_DURATION="${TEST_DURATION:-10}"            # 测试持续时间（秒）
+TEST_DURATION="${TEST_DURATION:-60}"            # 测试持续时间（秒）
 WORKLOAD_DURATION="${WORKLOAD_DURATION:-120}"   # 工作负载最长持续时间（秒）
 TIMESERIES_BIN="${TIMESERIES_BIN:-./pmu_monitor}"
 WORKLOAD_BIN="${WORKLOAD_BIN:-./test/test_workload}"
@@ -115,7 +115,6 @@ info "工作负载 PID: $WORKLOAD_PID"
 WORKLOAD_KILLER_PID=$!
 
 # 等待工作负载完成内存初始化
-sleep 2
 assert_true "工作负载进程存活" kill -0 "$WORKLOAD_PID"
 echo
 
