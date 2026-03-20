@@ -1,1 +1,4 @@
 /log
+/*/*.o
+pmu_monitor
+/test/test_workload
