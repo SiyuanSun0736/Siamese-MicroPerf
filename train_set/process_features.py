@@ -32,6 +32,7 @@ import json
 import argparse
 import math
 from pathlib import Path
+from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -51,7 +52,7 @@ FEATURE_NAMES = [d[3] for d in MPKI_DEFS] + ["lbr_log1p_span"]
 D = len(FEATURE_NAMES)  # = 6
 
 
-def load_csv_to_tensor(csv_path: str, seq_len: int = 60) -> np.ndarray:
+def load_csv_to_tensor(csv_path: Union[str, Path], seq_len: int = 60) -> np.ndarray:
     """
     读取 pmu_monitor CSV，计算 MPKI 特征，返回 (seq_len × D) float32 数组。
 
@@ -85,13 +86,13 @@ def load_csv_to_tensor(csv_path: str, seq_len: int = 60) -> np.ndarray:
         return np.zeros((seq_len, D), dtype=np.float32)
 
     # ── 计算 MPKI 特征 ────────────────────────────────────────────────────────
-    inst = df["inst_retired.any"].values.astype(np.float64)
-    # 防止除零：指令数为 0 时设为 1（后续 MPKI=0）
-    inst = np.where(inst == 0, 1.0, inst)
+    inst = np.asarray(df["inst_retired.any"].values, dtype=np.float64)
+    # 防止除零：指令数为 0 时设为 1（后续 MPKI=0）——原地替换以避免类型检查歧义
+    inst[inst == 0] = 1.0
 
     features = []
     for (num_col, denom_col, scale, _) in MPKI_DEFS:
-        num = df[num_col].values.astype(np.float64)
+        num = np.asarray(df[num_col].values, dtype=np.float64)
         mpki = num / inst * scale
         features.append(mpki)
 
@@ -122,7 +123,7 @@ def load_csv_to_tensor(csv_path: str, seq_len: int = 60) -> np.ndarray:
     return X.astype(np.float32)
 
 
-def process_manifest(manifest_path: str, features_dir: str, seq_len: int) -> None:
+def process_manifest(manifest_path: Union[str, Path], features_dir: Union[str, Path], seq_len: int) -> None:
     """
     按照 manifest.jsonl 批量处理所有 CSV，
     将 .npy 特征文件保存到 features_dir。

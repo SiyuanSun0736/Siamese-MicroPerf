@@ -23,11 +23,29 @@ import json
 import random
 import sys
 from pathlib import Path
+from typing import Union
 
 import numpy as np
-import torch
-import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader, random_split
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import torch
+    import torch.nn as nn
+    from torch.utils.data import Dataset, DataLoader, random_split
+else:
+    try:
+        import torch
+        import torch.nn as nn
+        from torch.utils.data import Dataset, DataLoader, random_split
+    except Exception:
+        # 在缺少 pytorch 的静态/轻量环境中提供占位符，
+        # 以降低编辑器/类型检查器报错；运行时若实际使用会抛出错误。
+        from typing import Any
+        torch = None  # type: ignore
+        nn = Any  # type: ignore
+        Dataset = object  # type: ignore
+        DataLoader = object  # type: ignore
+        random_split = None  # type: ignore
 
 # ── 默认超参数 ────────────────────────────────────────────────────────────────
 DEFAULT_SEQ_LEN   = 60       # 时间步长 T；须与 process_features.py 一致
@@ -49,7 +67,7 @@ class PairDataset(Dataset):
     label: float 0.0 或 1.0
     """
 
-    def __init__(self, manifest_path: str, features_dir: str):
+    def __init__(self, manifest_path: Union[str, Path], features_dir: Union[str, Path]):
         manifest_path = Path(manifest_path)
         features_dir  = Path(features_dir)
 

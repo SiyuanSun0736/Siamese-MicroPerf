@@ -184,7 +184,8 @@ def load_and_prepare(csv_path: str) -> pd.DataFrame:
 
 def plot(csv_path: str, output_path: str, show_phases: bool = True):
     df = load_and_prepare(csv_path)
-    t = df["time_s"]
+    # 明确转换为 numpy float 数组，避免类型检查将 pandas.Series 视为混合类型
+    t = df["time_s"].to_numpy(dtype=float)
     max_ms = float(df["elapsed_ms"].max())
     phases = build_phases(max_ms + 500) if show_phases else []
 
@@ -209,12 +210,17 @@ def plot(csv_path: str, output_path: str, show_phases: bool = True):
              log_y=False, yformatter=None, extra_fn=None):
         ax = axes[ax_i]
         y = np.asarray(y_series, dtype=float)
-        ax.plot(t, y, **LINE_KW)
+        ax.plot(t, y, linewidth=LINE_KW["linewidth"], marker=LINE_KW["marker"],
+            markersize=LINE_KW["markersize"], color=LINE_KW["color"])
         add_phase_bands(ax, phases)
         ax.set_title(title, fontsize=9.5, pad=4)
         ax.set_ylabel(ylabel, fontsize=8)
         ax.tick_params(axis="both", labelsize=7.5)
-        ax.grid(True, which="major", **GRID_KW)
+        # 展开 GRID_KW 避免类型推断错误
+        ax.grid(True, which="major",
+                linestyle=GRID_KW["linestyle"],
+                alpha=GRID_KW["alpha"],
+                linewidth=GRID_KW["linewidth"])
         if log_y:
             ax.set_yscale("log")
             ax.grid(True, which="minor", linestyle=":", alpha=0.18, linewidth=0.4)
@@ -225,48 +231,51 @@ def plot(csv_path: str, output_path: str, show_phases: bool = True):
 
     # ① Instructions retired
     draw(0,
-        df["inst_retired.any_corr"],
+        df["inst_retired.any_corr"].to_numpy(dtype=float),
         "① Instructions retired / 500 ms (P1 highest)",
         "Instructions", yformatter=si_fmt)
 
     # ② Branch instructions
     draw(1,
-        df["branch-instructions_corr"],
+        df["branch-instructions_corr"].to_numpy(dtype=float),
         "② Branch instructions / 500 ms (P2 highest)",
         "Branch instr.", yformatter=si_fmt)
 
     # ③ Branch misprediction rate
     draw(2,
-        df["branch_miss_pct"],
+        df["branch_miss_pct"].to_numpy(dtype=float),
         "③ Branch misprediction rate (P3 expected highest; modern CPUs may optimize)",
         "Mis-prediction (%)", yformatter=pct_fmt)
 
     # ④ L1 instruction cache misses (log scale)
     draw(3,
-        df["L1-icache-load-misses_corr"].clip(lower=1),
+        df["L1-icache-load-misses_corr"].clip(lower=1).to_numpy(dtype=float),
         "④ L1 instruction cache misses / 500 ms (P4/P5 highest)",
         "Misses", log_y=True)
     axes[3].yaxis.set_major_formatter(mticker.FuncFormatter(si_fmt))
 
     # ⑤ iTLB accesses (log scale)
     draw(4,
-        df["iTLB-loads_corr"].clip(lower=1),
+        df["iTLB-loads_corr"].clip(lower=1).to_numpy(dtype=float),
         "⑤ iTLB accesses / 500 ms (P4/P5 highest)",
         "Accesses", log_y=True)
     axes[4].yaxis.set_major_formatter(mticker.FuncFormatter(si_fmt))
 
     # ⑥ iTLB load misses (log scale)
     draw(5,
-        df["iTLB-load-misses_corr"].clip(lower=1),
+        df["iTLB-load-misses_corr"].clip(lower=1).to_numpy(dtype=float),
         "⑥ iTLB load misses / 500 ms (P5 ≫ P4 ≈ 0)",
         "Misses", log_y=True)
     axes[5].yaxis.set_major_formatter(mticker.FuncFormatter(si_fmt))
 
     # ⑦ LBR average jump span (after clipping artifacts)
     ax7 = axes[6]
-    ok = ~df["lbr_span_artifact"]
-    bad = df["lbr_span_artifact"]
-    ax7.plot(t[ok], df["lbr_span_clipped"][ok], **LINE_KW, label="Valid values")
+    ok = ~df["lbr_span_artifact"].to_numpy(dtype=bool)
+    bad = df["lbr_span_artifact"].to_numpy(dtype=bool)
+    ax7.plot(t[ok], df["lbr_span_clipped"].to_numpy(dtype=float)[ok],
+             linewidth=LINE_KW["linewidth"], marker=LINE_KW["marker"],
+             markersize=LINE_KW["markersize"], color=LINE_KW["color"],
+             label="Valid values")
     if bad.any():
         ax7.scatter(
             t[bad], [LBR_CLIP_BYTES * 0.97] * bad.sum(),
@@ -280,14 +289,19 @@ def plot(csv_path: str, output_path: str, show_phases: bool = True):
     )
     ax7.set_ylabel("Bytes", fontsize=8)
     ax7.tick_params(axis="both", labelsize=7.5)
-    ax7.grid(True, which="major", **GRID_KW)
+    ax7.grid(True, which="major",
+             linestyle=GRID_KW["linestyle"],
+             alpha=GRID_KW["alpha"],
+             linewidth=GRID_KW["linewidth"])
     ax7.yaxis.set_major_formatter(mticker.FuncFormatter(si_fmt))
     ax7.set_ylim(bottom=0)
     ax7.legend(fontsize=7, loc="upper right", framealpha=0.85)
 
     # ⑧ lbr_log1p_span (natural log transform, overview)
     ax8 = axes[7]
-    ax8.plot(t, df["lbr_log1p_span"], **LINE_KW)
+    ax8.plot(t, df["lbr_log1p_span"].to_numpy(dtype=float),
+             linewidth=LINE_KW["linewidth"], marker=LINE_KW["marker"],
+             markersize=LINE_KW["markersize"], color=LINE_KW["color"])
     add_phase_bands(ax8, phases)
     ax8.set_title(
         "⑧ lbr_log1p(span) = ln(1 + avg_span) (log-scale overview)",
@@ -295,7 +309,10 @@ def plot(csv_path: str, output_path: str, show_phases: bool = True):
     )
     ax8.set_ylabel("ln(1 + span)", fontsize=8)
     ax8.tick_params(axis="both", labelsize=7.5)
-    ax8.grid(True, which="major", **GRID_KW)
+    ax8.grid(True, which="major",
+             linestyle=GRID_KW["linestyle"],
+             alpha=GRID_KW["alpha"],
+             linewidth=GRID_KW["linewidth"])
 
     # 在 ⑧ 上标注各典型值
     annot = [
