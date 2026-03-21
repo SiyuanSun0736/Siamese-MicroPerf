@@ -2,3 +2,7 @@
 /*/*.o
 pmu_monitor
 /test/test_workload
+/train_set/bin
+/train_set/bin_bolt
+/train_set/data
+/train_set/data_bolt
