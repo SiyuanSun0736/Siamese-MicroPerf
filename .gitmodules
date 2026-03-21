@@ -1,0 +1,3 @@
+[submodule "llvm-test-suite"]
+	path = llvm-test-suite
+	url = https://github.com/SiyuanSun0736/llvm-test-suite
