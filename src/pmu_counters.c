@@ -64,6 +64,7 @@ int pmu_init(pid_t pid, int cpu)
         memset(&pe, 0, sizeof(pe));         \
         pe.size     = sizeof(pe);           \
         pe.disabled = 1;                    \
+        pe.inherit  = 1;                    \
     } while (0)
 
     /* inst_retired.any — RAW 0x00C0 */
