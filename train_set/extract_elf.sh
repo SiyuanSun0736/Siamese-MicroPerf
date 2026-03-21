@@ -152,6 +152,21 @@ while IFS= read -r -d '' elf_path; do
             cp "$test_src" "$test_dest_dir/${base_name}.test"
             echo "  测试文件：${base_name}.test  →  ${prog_name}/${base_name}.test"
         fi
+
+        # 扫描 RUN: 行中引用的输出目录（如 Output/），在目标测试目录中预先创建
+        while IFS= read -r run_line; do
+            # 提取所有形如 "SomeDir/" 的路径前缀（至少一级目录）
+            while read -r out_dir; do
+                [[ -z "$out_dir" ]] && continue
+                if [[ $DRY_RUN -eq 1 ]]; then
+                    echo "[预览] 输出目录 : ${prog_name}/${out_dir}"
+                else
+                    mkdir -p "$test_dest_dir/$out_dir"
+                    echo "  输出目录：${prog_name}/${out_dir}"
+                fi
+            done < <(grep -oP '(?<!\S)[A-Za-z][A-Za-z0-9_.-]*/(?=[^\s/])' <<< "$run_line" \
+                     | sed 's|/$||' | sort -u)
+        done < <(grep '^RUN:' "$test_src")
     fi
 
     # ── 复制运行时数据文件 ────────────────────────────────────────────────────
@@ -183,6 +198,26 @@ while IFS= read -r -d '' elf_path; do
         -not -name "*.size" \
         -not -name "*.test" \
         \( -type f -o -type l \) -print0 | sort -z)
+
+    # ── 扫描配置文件中的输出目录引用 ───────────────────────────────────────────
+    # 某些程序（如 JM/lencod）将输出路径写在 .cfg 文件中而非 RUN: 行，
+    # 需额外扫描所有 .cfg 文件，提取引号内含 "/" 的路径并创建其目录部分。
+    while IFS= read -r -d '' cfg_file; do
+        while read -r cfg_dir; do
+            [[ -z "$cfg_dir" || "$cfg_dir" == "." ]] && continue
+            if [[ $DRY_RUN -eq 1 ]]; then
+                echo "[预览] 配置输出目录: ${prog_name}/${cfg_dir}"
+            else
+                mkdir -p "$test_dest_dir/$cfg_dir"
+                echo "  配置输出目录：${prog_name}/${cfg_dir}"
+            fi
+        done < <(grep -oP '"[^"]+/[^"]+"' "$cfg_file" \
+                 | tr -d '"' | xargs -I{} dirname {} \
+                 | grep -v '^\.' | grep -vP '\.' | sort -u)
+    done < <(find "$elf_dir" \
+        -not -path "*/CMakeFiles/*" \
+        -not -path "*/Output/*" \
+        -name "*.cfg" \( -type f -o -type l \) -print0)
 
 done < <(find "$SEARCH_ROOT" -type f -executable -print0 | sort -z)
 

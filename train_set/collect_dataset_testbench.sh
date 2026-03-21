@@ -41,6 +41,7 @@
 #   OVERWRITE     是否覆盖已有数据：1=总是重新采集，0=已有足够数据则跳过（默认 0）
 #   MIN_ROWS      最少有效数据行数，不足则重试（默认 50，约 30s/500ms×0.83）
 #   RETRY_MAX     每个基准最多重试次数（默认 3）
+#   DRYRUN        干跑模式：1=只解析并打印命令，不执行任何采集（默认 0）
 #
 # 输出文件结构：
 #   train_set/
@@ -65,10 +66,11 @@ MANIFEST="${MANIFEST:-$SCRIPT_DIR/manifest_${VARIANT}.jsonl}"
 
 PMU_WINDOW="${PMU_WINDOW:-30}"
 INTERVAL_MS="${INTERVAL_MS:-500}"
-CONTINUOUS="${CONTINUOUS:-1}"
+CONTINUOUS="${CONTINUOUS:-0}"
 OVERWRITE="${OVERWRITE:-1}"
 MIN_ROWS="${MIN_ROWS:-50}"
 RETRY_MAX="${RETRY_MAX:-3}"
+DRYRUN="${DRYRUN:-0}"
 
 # ── 颜色 ─────────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -123,6 +125,18 @@ if [[ "$PARANOID" -gt 1 ]] && [[ "$EUID" -ne 0 ]]; then
 fi
 
 mkdir -p "$DATA_DIR" "$PROJECT_ROOT/log"
+
+# 将整个脚本的 stdout/stderr 记录到 log 文件（包含时间戳与 PID）
+LOG_TS=$(date +%Y%m%d_%H%M%S)
+LOGFILE="$PROJECT_ROOT/log/collect_dataset_testbench_${VARIANT}_${LOG_TS}_$$.log"
+exec > >(tee -a "$LOGFILE") 2>&1
+info "记录脚本输出到: ${LOGFILE#$PROJECT_ROOT/}"
+
+# 将整个脚本的 stdout/stderr 记录到 log 文件（包含时间戳与 PID）
+LOG_TS=$(date +%Y%m%d_%H%M%S)
+LOGFILE="$PROJECT_ROOT/log/collect_dataset_testbench_${VARIANT}_${LOG_TS}_$$.log"
+exec > >(tee -a "$LOGFILE") 2>&1
+info "记录脚本输出到: ${LOGFILE#$PROJECT_ROOT/}"
 
 # ── PMU 采集函数 ──────────────────────────────────────────────────────────────
 # 参数:
@@ -356,11 +370,12 @@ info "DATA_DIR:   $DATA_DIR"
 info "PMU 窗口:   ${PMU_WINDOW}s  |  采样间隔: ${INTERVAL_MS}ms"
 info "持续循环:   $( [[ $CONTINUOUS -eq 1 ]] && echo '是（Ctrl+C 停止）' || echo '否（单次）')"
 info "最少行数:   ${MIN_ROWS}  |  最大重试: ${RETRY_MAX}"
+[[ "$DRYRUN" -eq 1 ]] && warn "★ DRYRUN 模式：仅解析命令，不执行采集 ★"
 echo
 
 # ── 主采集循环（支持持续运行）────────────────────────────────────────────────
 run_one_pass() {
-> "$MANIFEST"
+[[ "$DRYRUN" -eq 0 ]] && > "$MANIFEST"
 
 local _pass_ok=0 _pass_skip=0
 for test_subdir in "$TEST_DIR"/*/; do
@@ -394,6 +409,19 @@ for test_subdir in "$TEST_DIR"/*/; do
     }
 
     info "  CMD: $bench_cmd"
+
+    # ── DRYRUN：打印完整执行信息后跳过采集 ──────────────────────────────────
+    if [[ "$DRYRUN" -eq 1 ]]; then
+        printf "${BOLD}  [DRYRUN]${NC} bench=%-20s\n"          "$bench_name"
+        printf "  ${CYAN}run_dir${NC}  = %s\n"                   "$test_subdir"
+        printf "  ${CYAN}binary${NC}   = %s\n"                   "$binary"
+        printf "  ${CYAN}full_cmd${NC} = cd %s && %s\n"          "$test_subdir" "$bench_cmd"
+        printf "  ${CYAN}out_csv${NC}  = %s\n"                   "$DATA_DIR/${bench_name}_${VARIANT}.csv"
+        echo
+        ((_pass_ok++)) || true
+        continue
+    fi
+
     _LAST_RUN_COUNT=0
 
     # ── PMU 采集（含重试）────────────────────────────────────────────────────
