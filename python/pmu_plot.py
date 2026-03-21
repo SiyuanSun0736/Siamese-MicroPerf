@@ -369,8 +369,8 @@ def main():
     )
     parser.add_argument(
         "-o", "--output",
-        default="python/pmu_plot.png",
-        help="输出图片路径（默认: python/pmu_plot.png）",
+        default="python/plots/pmu_plot.png",
+        help="输出图片路径（默认: python/plots/pmu_plot.png）",
     )
     parser.add_argument(
         "--no-phases",
