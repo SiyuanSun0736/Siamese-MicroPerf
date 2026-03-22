@@ -38,7 +38,7 @@
 #   PMU_WINDOW    PMU 采集时间窗口，秒（默认 30）
 #   INTERVAL_MS   pmu_monitor 采样间隔，毫秒（默认 500）
 #   CONTINUOUS    持续循环模式：1=无限循环直到 Ctrl+C，0=跑一遍退出（默认 0）
-#   OVERWRITE     是否覆盖已有数据：1=总是重新采集，0=已有足够数据则跳过（默认 0）
+#   OVERWRITE     是否覆盖已有数据：1=总是重新采集，0=已有足够数据则跳过（默认 1）
 #   MIN_ROWS      最少有效数据行数，不足则重试（默认 50，约 30s/500ms×0.83）
 #   RETRY_MAX     每个基准最多重试次数（默认 3）
 #   DRYRUN        干跑模式：1=只解析并打印命令，不执行任何采集（默认 0）
@@ -94,17 +94,50 @@ declare -A BENCH_LOOP_PIDS  # 持续模式：基准名 → 工作负载循环 PI
 # ── 清理钩子 ─────────────────────────────────────────────────────────────────
 LOOP_PID=""
 MON_PID=""
+TEE_PID=""
+_CLEANUP_DONE=0
+
+# 强力清理：尝试杀掉同一进程组内的所有子进程（保留当前脚本）
 cleanup() {
+    # 幂等保护：防止 INT/TERM trap 与 EXIT trap 重复执行
+    [[ "$_CLEANUP_DONE" -eq 1 ]] && return
+    _CLEANUP_DONE=1
+
+    # 终止已追踪的前台子进程
     [[ -n "$LOOP_PID" ]] && kill "$LOOP_PID" 2>/dev/null || true
     [[ -n "$MON_PID"  ]] && kill "$MON_PID"  2>/dev/null || true
-    # 持续模式：终止所有持久工作负载循环进程
     local _pid
     for _pid in "${BENCH_LOOP_PIDS[@]:-}"; do
         [[ -n "$_pid" ]] && kill "$_pid" 2>/dev/null || true
     done
-    wait 2>/dev/null || true
+
+    # 获取当前脚本的进程组 ID，逐一 TERM 再 KILL（排除自身）
+    local pgid
+    pgid=$(ps -o pgid= "$$" 2>/dev/null | tr -d ' ')
+    if [[ -n "$pgid" ]]; then
+        local p
+        for p in $(ps -o pid= -g "$pgid" 2>/dev/null || true); do
+            if [[ "$p" -ne "$$" ]]; then
+                kill -TERM "$p" 2>/dev/null || true
+            fi
+        done
+        sleep 0.2
+        for p in $(ps -o pid= -g "$pgid" 2>/dev/null || true); do
+            if [[ "$p" -ne "$$" ]]; then
+                kill -KILL "$p" 2>/dev/null || true
+            fi
+        done
+    fi
+
+    # 显式终止并等待 tee 子进程，避免 wait 因管道未关闭而永久阻塞
+    [[ -n "$TEE_PID" ]] && kill "$TEE_PID" 2>/dev/null || true
+    [[ -n "$TEE_PID" ]] && wait "$TEE_PID" 2>/dev/null || true
 }
-trap cleanup EXIT INT TERM
+
+# 重新设置 trap：SIGINT 使用 130，SIGTERM 使用 143
+trap 'cleanup; exit 130' INT
+trap 'cleanup; exit 143' TERM
+trap cleanup EXIT
 
 # ── 前置检查 ─────────────────────────────────────────────────────────────────
 cd "$PROJECT_ROOT"
@@ -130,19 +163,17 @@ mkdir -p "$DATA_DIR" "$PROJECT_ROOT/log"
 LOG_TS=$(date +%Y%m%d_%H%M%S)
 LOGFILE="$PROJECT_ROOT/log/collect_dataset_testbench_${VARIANT}_${LOG_TS}_$$.log"
 exec > >(tee -a "$LOGFILE") 2>&1
-info "记录脚本输出到: ${LOGFILE#$PROJECT_ROOT/}"
-
-# 将整个脚本的 stdout/stderr 记录到 log 文件（包含时间戳与 PID）
-LOG_TS=$(date +%Y%m%d_%H%M%S)
-LOGFILE="$PROJECT_ROOT/log/collect_dataset_testbench_${VARIANT}_${LOG_TS}_$$.log"
-exec > >(tee -a "$LOGFILE") 2>&1
+TEE_PID=$!   # 记录 tee 子进程 PID，供 cleanup 精确终止
 info "记录脚本输出到: ${LOGFILE#$PROJECT_ROOT/}"
 
 # ── PMU 采集函数 ──────────────────────────────────────────────────────────────
 # 参数:
-#   $1  bench_cmd   — 已展开变量的基准运行命令（不含 cd）
-#   $2  run_dir     — 运行目录（对应 .test 中的 cd %S）
-#   $3  out_csv     — 输出 CSV 路径
+#   $1  bench_name  — 基准名称
+#   $2  bench_cmd   — 已展开变量的基准运行命令（不含 cd）
+#   $3  run_dir     — 运行目录（对应 .test 中的 cd %S）
+#   $4  out_csv     — 输出 CSV 路径
+# 执行次数 = pmu_monitor 就绪后到采集窗口结束期间，循环内单个程序重新执行的次数
+#           （cnt_before 在窗口开始时读取，cnt_after 在窗口结束时读取，取差值）
 collect_pmu() {
     local bench_name="$1"
     local bench_cmd="$2"
@@ -212,9 +243,7 @@ collect_pmu() {
     local _safe_name="${bench_name//[^a-zA-Z0-9_]/_}"
     local _cnt_var="BENCH_CNT_${_safe_name}"
     local cnt_file="${!_cnt_var:-}"
-    # 记录窗口开始时的基线次数，结束时相减得本窗口执行次数
-    local cnt_before=0
-    [[ -f "$cnt_file" ]] && cnt_before=$(cat "$cnt_file" 2>/dev/null || echo 0)
+    local cnt_before=0  # 在 pmu_monitor 就绪后再读取，见下方
 
     # 启动 pmu_monitor，监控循环进程（含 inherit 子进程）
     # 每轮重新挂载以获取独立的 PMU 计数窗口；循环进程 PID 不变
@@ -250,6 +279,11 @@ collect_pmu() {
         touch "$_ready_flag_var"
         info "  pmu_monitor 已就绪，通知 loop 开始执行 benchmark"
     fi
+
+    # 在 pmu_monitor 就绪、loop 开始执行后读取基线计数
+    # 执行次数 = 本窗口内循环内单个程序重新执行的次数（cnt_after - cnt_before）
+    # reuse_loop=0 时 loop 此刻才刚被允许执行，cnt 仍为 0，cnt_before=0 亦正确
+    [[ -f "$cnt_file" ]] && cnt_before=$(cat "$cnt_file" 2>/dev/null || echo 0)
 
     # 采集 PMU_WINDOW 秒
     sleep "$PMU_WINDOW" || true
@@ -461,7 +495,8 @@ for test_subdir in "$TEST_DIR"/*/; do
         ((attempt++)) || true
         [[ "$attempt" -gt 1 ]] && retry "$bench_name: 第 $attempt 次重试..."
         collect_rc=0
-        collect_pmu "$bench_name" "$bench_cmd" "$test_subdir" "$out_csv" || collect_rc=$?
+        collect_pmu "$bench_name" "$bench_cmd" "$test_subdir" "$out_csv" \
+            || collect_rc=$?
         if [[ "$collect_rc" -eq 0 ]]; then
             break
         elif [[ "$collect_rc" -eq 2 ]]; then
