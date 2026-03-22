@@ -7,3 +7,4 @@
 /train_set/data_bolt
 /train_set/test
 /train_set/manifest*
+/train_set/bolt_profiles

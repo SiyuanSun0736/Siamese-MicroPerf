@@ -37,7 +37,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # ── 默认参数 ──────────────────────────────────────────────────────────────────
-VERSION="O2-bolt"
+VERSION="O3-bolt"
 BUILD_DIR="build-$VERSION"
 MS_SUBDIR="Applications"
 # MultiSource 目录名（允许用户修改，例如 "MultiSource" 或 "MultiSource-custom"）
