@@ -49,7 +49,9 @@
 #   RETRY_MAX     每个基准最多重试次数（默认 3）
 #   DRYRUN        干跑模式：1=只解析并打印命令，不执行任何采集（默认 0）
 #   LBR_TID_MON   启用 tid_monitor 监控层（-T 选项）：在子线程创建瞬间为其独立
-#                 挂载 LBR 采集事件，覆盖所有子线程（默认 0，需要 CAP_NET_ADMIN）
+#                 挂载 LBR 采集事件，覆盖所有子线程（默认 1，需要 CAP_NET_ADMIN）
+#   PRINT_TIME_FIELDS  CSV 中是否输出每个计数器的 _time_enabled/_time_running 列
+#                      1=输出（-E 选项），0=不输出（默认 0）
 #
 # 输出文件结构：
 #   train_set/
@@ -65,7 +67,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-VARIANT="${VARIANT:-O1-g}"
+VARIANT="${VARIANT:-O3-g}"
 BIN_DIR="${BIN_DIR:-$SCRIPT_DIR/bin/$VARIANT}"
 TEST_DIR="${TEST_DIR:-$SCRIPT_DIR/test/$VARIANT}"
 DATA_DIR="${DATA_DIR:-$SCRIPT_DIR/data/$VARIANT}"
@@ -79,7 +81,8 @@ OVERWRITE="${OVERWRITE:-1}"
 MIN_ROWS="${MIN_ROWS:-50}"
 RETRY_MAX="${RETRY_MAX:-3}"
 DRYRUN="${DRYRUN:-0}"
-LBR_TID_MON="${LBR_TID_MON:-0}"
+LBR_TID_MON="${LBR_TID_MON:-1}"
+PRINT_TIME_FIELDS="${PRINT_TIME_FIELDS:-0}"
 
 # ── 颜色 ─────────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -265,7 +268,8 @@ collect_pmu() {
     # stderr 写入日志以便诊断计数器打开失败等问题
     local pmu_err_log="$PROJECT_ROOT/log/pmu_monitor_stderr_$$.txt"
     local pmu_extra_args=""
-    [[ "$LBR_TID_MON" -eq 1 ]] && pmu_extra_args="-T"
+    [[ "$LBR_TID_MON" -eq 1 ]]       && pmu_extra_args="-T"
+    [[ "$PRINT_TIME_FIELDS" -eq 1 ]] && pmu_extra_args+" -E"
     "$PMU_MONITOR" "$LOOP_PID" -i "$INTERVAL_MS" $pmu_extra_args >/dev/null 2>"$pmu_err_log" &
     MON_PID=$!
 
@@ -355,9 +359,12 @@ check_csv_quality() {
     local csv="$1"
     [[ -f "$csv" ]] || { warn "文件不存在: $csv"; return 1; }
     local n inst_zero lbr_zero row_count
+    # 列索引：不含 time 字段时 LBR 在第9列（2固定+6计数器+1），含时在第21列（2+6×3+1）
+    local lbr_col
+    lbr_col=$( [[ "$PRINT_TIME_FIELDS" -eq 1 ]] && echo 21 || echo 9 )
     row_count=$(awk 'NR>1' "$csv" | wc -l)
     inst_zero=$(awk -F, 'NR>1 && $3=="0"' "$csv" | wc -l)
-    lbr_zero=$(awk -F, 'NR>1 && $21=="0"' "$csv" | wc -l)
+    lbr_zero=$(awk -F, -v col="$lbr_col" 'NR>1 && $col=="0"' "$csv" | wc -l)
     local lbr_pos=$(( row_count - lbr_zero ))
     local issues=""
     [[ "$row_count" -lt "$MIN_ROWS" ]] && issues+="行数不足(${row_count}<${MIN_ROWS}) "
@@ -422,6 +429,7 @@ info "PMU 窗口:   ${PMU_WINDOW}s  |  采样间隔: ${INTERVAL_MS}ms"
 info "持续循环:   $( [[ $CONTINUOUS -eq 1 ]] && echo '是（Ctrl+C 停止）' || echo '否（单次）')"
 info "最少行数:   ${MIN_ROWS}  |  最大重试: ${RETRY_MAX}"
 info "LBR模式:    $( [[ $LBR_TID_MON -eq 1 ]] && echo '手动挂载（-T，tid_monitor）' || echo '默认（仅根PID）')"
+info "time字段:   $( [[ $PRINT_TIME_FIELDS -eq 1 ]] && echo '输出（-E）' || echo '不输出（默认）')"
 [[ "$DRYRUN" -eq 1 ]] && warn "★ DRYRUN 模式：仅解析命令，不执行采集 ★"
 echo
 

@@ -19,6 +19,7 @@
  *   sudo ./pmu_monitor 12345             # 监控 pid 12345，1 s
  *   sudo ./pmu_monitor 12345 -i 200      # 监控 pid 12345，200 ms
  *   sudo ./pmu_monitor 12345 -T          # 手动为每个子线程挂载独立 LBR
+ *   sudo ./pmu_monitor 12345 -E          # CSV 中附加 time_enabled/time_running 列
  */
 
 #define _GNU_SOURCE
@@ -94,6 +95,7 @@ int main(int argc, char **argv)
     pid_t target_pid  = -1;
     long  interval_ms = 1000;
     int   opt_tid_mon = 0;   /* -T 标志 */
+    int   opt_print_time = 0; /* -E 标志：输出 time_enabled/time_running 列 */
 
     /* ---- 解析命令行参数 ---- */
     for (int i = 1; i < argc; i++) {
@@ -105,6 +107,8 @@ int main(int argc, char **argv)
             }
         } else if (strcmp(argv[i], "-T") == 0) {
             opt_tid_mon = 1;
+        } else if (strcmp(argv[i], "-E") == 0) {
+            opt_print_time = 1;
         } else {
             char *end;
             long v = strtol(argv[i], &end, 10);
@@ -112,7 +116,7 @@ int main(int argc, char **argv)
                 target_pid = (pid_t)v;
             else {
                 fprintf(stderr,
-                        "Usage: %s [PID] [-i <interval_ms>] [-T]\n", argv[0]);
+                        "Usage: %s [PID] [-i <interval_ms>] [-T] [-E]\n", argv[0]);
                 return 1;
             }
         }
@@ -126,6 +130,10 @@ int main(int argc, char **argv)
 
     signal(SIGINT,  cleanup);
     signal(SIGTERM, cleanup);
+
+    /* ---- 应用输出选项 ---- */
+    if (opt_print_time)
+        output_set_print_time_fields(1);
 
     /* ---- 创建日志目录与文件 ---- */
     mkdir("log", 0755);
@@ -201,6 +209,8 @@ int main(int argc, char **argv)
     printf("  %c LBR branch stack (lbr_avg_span, lbr_log1p_span)%s\n",
            lbr_enabled ? '+' : ' ',
            tid_mon_enabled ? " [no-inherit, tid_monitor active]" : "");
+    printf("  time_enabled/running columns: %s\n",
+           opt_print_time ? "yes (-E)" : "no (omitted)");
     printf("\nMonitoring… (Ctrl+C to stop)\n\n");
 
     /* ---- 创建 timerfd（CLOCK_MONOTONIC，无漂移）---- */

@@ -30,6 +30,13 @@ typedef struct {
 void output_compute_lbr(const lbr_stats_t *stats, lbr_metrics_t *out);
 
 /*
+ * output_set_print_time_fields — 控制 CSV 中是否输出每个计数器的
+ *   <name>_time_enabled 与 <name>_time_running 列。
+ *   enable=1 输出，enable=0（默认）不输出。
+ */
+void output_set_print_time_fields(int enable);
+
+/*
  * output_csv_header — 向文件写入 CSV 表头（含换行）。
  */
 void output_csv_header(FILE *f);

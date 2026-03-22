@@ -9,6 +9,14 @@
 #include "pmu_counters.h"
 #include "lbr.h"
 
+/* 是否在 CSV 中输出 <name>_time_enabled / <name>_time_running 列（默认关闭）*/
+static int g_print_time_fields = 0;
+
+void output_set_print_time_fields(int enable)
+{
+    g_print_time_fields = enable;
+}
+
 /* ── 指标计算 ────────────────────────────────────────────────────────────── */
 
 void output_compute_lbr(const lbr_stats_t *stats, lbr_metrics_t *out)
@@ -25,11 +33,15 @@ void output_compute_lbr(const lbr_stats_t *stats, lbr_metrics_t *out)
 void output_csv_header(FILE *f)
 {
     fprintf(f, "elapsed_ms,timestamp");
-    for (int i = 0; i < PMU_NUM_COUNTERS; i++)
-        fprintf(f, ",%s,%s_time_enabled,%s_time_running",
-                pmu_counters[i].name,
-                pmu_counters[i].name,
-                pmu_counters[i].name);
+    for (int i = 0; i < PMU_NUM_COUNTERS; i++) {
+        if (g_print_time_fields)
+            fprintf(f, ",%s,%s_time_enabled,%s_time_running",
+                    pmu_counters[i].name,
+                    pmu_counters[i].name,
+                    pmu_counters[i].name);
+        else
+            fprintf(f, ",%s", pmu_counters[i].name);
+    }
     fprintf(f, ",lbr_samples,lbr_avg_span,lbr_log1p_span\n");
     fflush(f);
 }
@@ -41,13 +53,21 @@ void output_csv_row(FILE *f, uint64_t elapsed_ms, const char *wall_str,
             (unsigned long long)elapsed_ms, wall_str);
 
     for (int i = 0; i < PMU_NUM_COUNTERS; i++) {
-        if (pmu_counters[i].enabled)
-            fprintf(f, ",%llu,%llu,%llu",
-                    (unsigned long long)pmu_counters[i].count,
-                    (unsigned long long)pmu_counters[i].time_enabled,
-                    (unsigned long long)pmu_counters[i].time_running);
-        else
-            fprintf(f, ",N/A,N/A,N/A");
+        if (pmu_counters[i].enabled) {
+            if (g_print_time_fields)
+                fprintf(f, ",%llu,%llu,%llu",
+                        (unsigned long long)pmu_counters[i].count,
+                        (unsigned long long)pmu_counters[i].time_enabled,
+                        (unsigned long long)pmu_counters[i].time_running);
+            else
+                fprintf(f, ",%llu",
+                        (unsigned long long)pmu_counters[i].count);
+        } else {
+            if (g_print_time_fields)
+                fprintf(f, ",N/A,N/A,N/A");
+            else
+                fprintf(f, ",N/A");
+        }
     }
 
     if (lbr_ok && lbr)
