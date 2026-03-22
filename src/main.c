@@ -6,15 +6,19 @@
  * 输出格式化（指标计算 + CSV / 终端）由 output 模块完成。
  *
  * 用法：
- *   sudo ./pmu_monitor [PID] [-i <interval_ms>]
+ *   sudo ./pmu_monitor [PID] [-i <interval_ms>] [-T]
  *
  *   PID         – 目标进程（-1 = 全系统，默认）
  *   -i <ms>     – 采样间隔毫秒（默认 1000）
+ *   -T          – 启用 tid_monitor 监控层：监听目标进程的 clone/fork/exec
+ *                 事件，在新子线程出现的瞬间为其独立挂载 LBR 采集事件
+ *                （必须配合具体 PID 使用，不支持 -1 全系统模式）
  *
  * 示例：
  *   sudo ./pmu_monitor                   # 全系统，1 s
  *   sudo ./pmu_monitor 12345             # 监控 pid 12345，1 s
  *   sudo ./pmu_monitor 12345 -i 200      # 监控 pid 12345，200 ms
+ *   sudo ./pmu_monitor 12345 -T          # 手动为每个子线程挂载独立 LBR
  */
 
 #define _GNU_SOURCE
@@ -33,12 +37,14 @@
 #include "pmu_counters.h"
 #include "lbr.h"
 #include "output.h"
+#include "tid_monitor.h"
 
 /* ── 全局状态 ────────────────────────────────────────────────────────────── */
 
-static FILE *log_file    = NULL;
-static int   timer_fd    = -1;
-static int   lbr_enabled = 0;
+static FILE *log_file       = NULL;
+static int   timer_fd       = -1;
+static int   lbr_enabled    = 0;
+static int   tid_mon_enabled = 0;   /* -T 选项：启用 tid_monitor 监控层 */
 
 /* ── 工具函数 ────────────────────────────────────────────────────────────── */
 
@@ -50,12 +56,28 @@ static uint64_t now_ms(void)
     return (uint64_t)ts.tv_sec * 1000ULL + (uint64_t)(ts.tv_nsec / 1000000LL);
 }
 
+/* ── tid_monitor 回调包装 ───────────────────────────────────────────────── */
+
+/* 使用独立包装函数而非函数指针强转，确保签名严格匹配 tid_born_cb_t */
+static void on_tid_born(pid_t tid, void *userdata)
+{
+    (void)userdata;
+    lbr_add_tid(tid);
+}
+
+static void on_tid_dead(pid_t tid, void *userdata)
+{
+    (void)userdata;
+    lbr_remove_tid(tid);
+}
+
 /* ── 信号处理 ────────────────────────────────────────────────────────────── */
 
 static void cleanup(int sig __attribute__((unused)))
 {
     pmu_close();
     if (lbr_enabled) lbr_close();
+    if (tid_mon_enabled) tid_monitor_close();
     if (timer_fd >= 0) close(timer_fd);
     if (log_file) {
         fclose(log_file);
@@ -69,8 +91,9 @@ static void cleanup(int sig __attribute__((unused)))
 
 int main(int argc, char **argv)
 {
-    pid_t target_pid = -1;
+    pid_t target_pid  = -1;
     long  interval_ms = 1000;
+    int   opt_tid_mon = 0;   /* -T 标志 */
 
     /* ---- 解析命令行参数 ---- */
     for (int i = 1; i < argc; i++) {
@@ -80,16 +103,25 @@ int main(int argc, char **argv)
                 fprintf(stderr, "Invalid interval: %ld\n", interval_ms);
                 return 1;
             }
+        } else if (strcmp(argv[i], "-T") == 0) {
+            opt_tid_mon = 1;
         } else {
             char *end;
             long v = strtol(argv[i], &end, 10);
             if (*end == '\0')
                 target_pid = (pid_t)v;
             else {
-                fprintf(stderr, "Usage: %s [PID] [-i <interval_ms>]\n", argv[0]);
+                fprintf(stderr,
+                        "Usage: %s [PID] [-i <interval_ms>] [-T]\n", argv[0]);
                 return 1;
             }
         }
+    }
+
+    if (opt_tid_mon && target_pid == -1) {
+        fprintf(stderr,
+                "Error: -T requires a specific PID (not system-wide -1)\n");
+        return 1;
     }
 
     signal(SIGINT,  cleanup);
@@ -134,7 +166,22 @@ int main(int argc, char **argv)
     }
 
     /* ---- 初始化 LBR ---- */
-    lbr_enabled = lbr_init(target_pid);
+    if (opt_tid_mon) {
+        lbr_enabled = lbr_init_no_inherit(target_pid);
+    } else {
+        lbr_enabled = lbr_init(target_pid);
+    }
+
+    /* ---- 初始化 tid_monitor（-T 模式）---- */
+    if (opt_tid_mon && lbr_enabled) {
+        if (tid_monitor_init(target_pid, on_tid_born, on_tid_dead, NULL) == 0) {
+            tid_mon_enabled = 1;
+        } else {
+            fprintf(stderr,
+                    "Warning: tid_monitor init failed, "
+                    "new threads will not be tracked\n");
+        }
+    }
 
     /* ---- 写入 CSV 表头 ---- */
     output_csv_header(log_file);
@@ -151,8 +198,9 @@ int main(int argc, char **argv)
         printf("  %c %s\n",
                pmu_counters[i].enabled ? '+' : ' ',
                pmu_counters[i].name);
-    printf("  %c LBR branch stack (lbr_avg_span, lbr_log1p_span)\n",
-           lbr_enabled ? '+' : ' ');
+    printf("  %c LBR branch stack (lbr_avg_span, lbr_log1p_span)%s\n",
+           lbr_enabled ? '+' : ' ',
+           tid_mon_enabled ? " [no-inherit, tid_monitor active]" : "");
     printf("\nMonitoring… (Ctrl+C to stop)\n\n");
 
     /* ---- 创建 timerfd（CLOCK_MONOTONIC，无漂移）---- */
@@ -175,11 +223,32 @@ int main(int argc, char **argv)
     lbr_stats_t lbr_stats = {0, 0, 0};
 
     while (1) {
-        struct pollfd pfd = { .fd = timer_fd, .events = POLLIN };
-        if (poll(&pfd, 1, -1) < 0) {
+        /*
+         * 同时监听 timerfd（周期采样）和 tid_monitor netlink socket
+         * （新 TID 出现事件），各自处理互不干扰。
+         */
+        struct pollfd pfds[2];
+        int nfds = 1;
+        pfds[0].fd     = timer_fd;
+        pfds[0].events = POLLIN;
+        if (tid_mon_enabled) {
+            pfds[1].fd     = tid_monitor_fd();
+            pfds[1].events = POLLIN;
+            nfds = 2;
+        }
+
+        if (poll(pfds, nfds, -1) < 0) {
             if (errno == EINTR) continue;
             perror("poll"); break;
         }
+
+        /* ── tid_monitor 事件：新 TID 出现，立即挂载 LBR ── */
+        if (tid_mon_enabled && (pfds[1].revents & POLLIN))
+            tid_monitor_dispatch();
+
+        /* ── 定时器到期：执行一次采样 ── */
+        if (!(pfds[0].revents & POLLIN))
+            continue;
 
         uint64_t expirations = 0;
         read(timer_fd, &expirations, sizeof(expirations));

@@ -21,8 +21,14 @@
 #   例如：train_set/bin/O1-g/aha_O1-g
 #
 # 依赖：
-#   - ./pmu_monitor（已编译，且 pmu_counters.c 中 pe.inherit=1）
+#   - ./pmu_monitor（已编译）
+#     · PMU 计数器（pmu_counters.c）使用 pe.inherit=1，自动继承子进程计数。
+#     · LBR 采样（lbr.c）始终以 inherit=0 打开（硬件限制）：
+#       - 默认模式：只对监控的根 PID 采集 LBR，子线程不被覆盖。
+#       - LBR_TID_MON=1 模式：启用 -T 选项，由 tid_monitor 监听 clone/fork
+#         事件，在子线程创建瞬间为其独立挂载 LBR 采集事件，覆盖全部子线程。
 #   - sudo 权限（或 perf_event_paranoid ≤ 1）
+#     LBR_TID_MON=1 额外需要 CAP_NET_ADMIN（NETLINK_CONNECTOR）
 #
 # 用法：
 #   cd /path/to/Siamese-MicroPerf
@@ -42,6 +48,8 @@
 #   MIN_ROWS      最少有效数据行数，不足则重试（默认 50，约 30s/500ms×0.83）
 #   RETRY_MAX     每个基准最多重试次数（默认 3）
 #   DRYRUN        干跑模式：1=只解析并打印命令，不执行任何采集（默认 0）
+#   LBR_TID_MON   启用 tid_monitor 监控层（-T 选项）：在子线程创建瞬间为其独立
+#                 挂载 LBR 采集事件，覆盖所有子线程（默认 0，需要 CAP_NET_ADMIN）
 #
 # 输出文件结构：
 #   train_set/
@@ -71,6 +79,7 @@ OVERWRITE="${OVERWRITE:-1}"
 MIN_ROWS="${MIN_ROWS:-50}"
 RETRY_MAX="${RETRY_MAX:-3}"
 DRYRUN="${DRYRUN:-0}"
+LBR_TID_MON="${LBR_TID_MON:-0}"
 
 # ── 颜色 ─────────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -205,11 +214,16 @@ collect_pmu() {
         eval "BENCH_CNT_${_safe_name}=\$cnt_file"
 
         # 在后台以 shell 循环持续运行基准，直到被 kill
-        # pmu_counters.c 中 pe.inherit=1，pmu_monitor 可捕获子进程 PMU 事件
         #
-        # 关键：pe.inherit 只对 perf_event_open() 之后 fork 的子进程生效。
-        # 因此循环进程必须等 pmu_monitor 就绪（ready_flag 出现）后再启动第一次 benchmark，
-        # 否则 benchmark 子进程在挂载前已 fork，导致整个采集窗口全为 0。
+        # PMU 计数器（pmu_counters.c）使用 pe.inherit=1，pmu_monitor 可捕获
+        # 子进程 PMU 事件。LBR（lbr.c）始终 inherit=0（硬件限制）：
+        #   · 默认模式：只有根 PID 自身（循环进程）的 LBR 被采集。
+        #   · LBR_TID_MON=1：由 tid_monitor 监听 clone/fork，子线程创建瞬间
+        #     立即挂载独立 LBR 事件，覆盖全部子线程。
+        #
+        # 关键：pmu_monitor 必须在 benchmark fork 子进程之前已完成 perf_event_open
+        # （无论哪种模式），因此循环进程须等 pmu_monitor 就绪（ready_flag）后
+        # 再执行第一次 benchmark，否则 PMU inherit 无法覆盖先于挂载的子进程。
         local ready_flag="$PROJECT_ROOT/log/pmu_ready_${bench_name//[^a-zA-Z0-9_]/_}_$$.flag"
         rm -f "$ready_flag"
 
@@ -247,9 +261,12 @@ collect_pmu() {
 
     # 启动 pmu_monitor，监控循环进程（含 inherit 子进程）
     # 每轮重新挂载以获取独立的 PMU 计数窗口；循环进程 PID 不变
+    # LBR_TID_MON=1 时附加 -T：由 tid_monitor 为每个新子线程独立挂载 LBR 事件
     # stderr 写入日志以便诊断计数器打开失败等问题
     local pmu_err_log="$PROJECT_ROOT/log/pmu_monitor_stderr_$$.txt"
-    "$PMU_MONITOR" "$LOOP_PID" -i "$INTERVAL_MS" >/dev/null 2>"$pmu_err_log" &
+    local pmu_extra_args=""
+    [[ "$LBR_TID_MON" -eq 1 ]] && pmu_extra_args="-T"
+    "$PMU_MONITOR" "$LOOP_PID" -i "$INTERVAL_MS" $pmu_extra_args >/dev/null 2>"$pmu_err_log" &
     MON_PID=$!
 
     # 短暂等待确认 pmu_monitor 成功启动
@@ -404,6 +421,7 @@ info "DATA_DIR:   $DATA_DIR"
 info "PMU 窗口:   ${PMU_WINDOW}s  |  采样间隔: ${INTERVAL_MS}ms"
 info "持续循环:   $( [[ $CONTINUOUS -eq 1 ]] && echo '是（Ctrl+C 停止）' || echo '否（单次）')"
 info "最少行数:   ${MIN_ROWS}  |  最大重试: ${RETRY_MAX}"
+info "LBR模式:    $( [[ $LBR_TID_MON -eq 1 ]] && echo '手动挂载（-T，tid_monitor）' || echo '默认（仅根PID）')"
 [[ "$DRYRUN" -eq 1 ]] && warn "★ DRYRUN 模式：仅解析命令，不执行采集 ★"
 echo
 

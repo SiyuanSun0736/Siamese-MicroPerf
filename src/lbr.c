@@ -3,6 +3,12 @@
  *
  * 使用 PERF_SAMPLE_BRANCH_STACK 从硬件 LBR 寄存器采集跳转记录，
  * 通过 perf mmap ring buffer 以零拷贝方式读取，计算跳转跨度统计。
+ *
+ * 内部以"槽位数组"管理所有活跃的 perf_event fd：
+ *   · 标准模式（lbr_init）：occupy slot[0]，inherit=0（LBR 不支持继承）。
+ *   · 无继承模式（lbr_init_no_inherit）：语义同上，名称更明确；
+ *     后续通过 lbr_add_tid() / lbr_remove_tid() 动态增删槽位。
+ *   · lbr_drain() 统一遍历所有活跃槽位，汇总到调用方的 lbr_stats_t。
  */
 
 #define _GNU_SOURCE
@@ -28,13 +34,27 @@
  */
 #define LBR_SPAN_MAX    (64ULL * 1024)
 
+/*
+ * 无继承模式下可同时跟踪的最大 TID 数量（含根 TID）。
+ * 槽位 0 始终预留给根 PID。
+ */
+#define MAX_LBR_SLOTS   1024
+
+/* ── 每槽位状态 ──────────────────────────────────────────────────────────── */
+
+typedef struct {
+    pid_t  tid;          /* 对应的 TID（-1 表示全系统槽）               */
+    int    fd;           /* perf_event fd                               */
+    struct perf_event_mmap_page *meta;
+    void  *data_buf;
+} lbr_slot_t;
+
 /* ── 模块私有状态 ─────────────────────────────────────────────────────────── */
 
-static int    lbr_fd         = -1;
-static struct perf_event_mmap_page *lbr_meta = NULL;
-static void  *lbr_data_buf   = NULL;
-static size_t lbr_page_size  = 0;
-static size_t lbr_data_size  = 0;
+static lbr_slot_t lbr_slots[MAX_LBR_SLOTS];
+static int        lbr_slot_count  = 0;   /* 当前活跃槽位数量              */
+static size_t     lbr_page_size   = 0;
+static size_t     lbr_data_size   = 0;
 
 /* ── 内部工具 ────────────────────────────────────────────────────────────── */
 
@@ -55,65 +75,17 @@ static void ring_read(uint64_t tail, const char *data, size_t mask,
         out[i] = data[(tail + i) & mask];
 }
 
-/* ── 公共接口 ────────────────────────────────────────────────────────────── */
-
-int lbr_init(pid_t pid)
+/*
+ * drain_slot — 排空单个槽位的 ring buffer，累加到 stats。
+ */
+static void drain_slot(lbr_slot_t *s, lbr_stats_t *stats)
 {
-    lbr_page_size = (size_t)sysconf(_SC_PAGESIZE);
-    lbr_data_size = (size_t)LBR_MMAP_PAGES * lbr_page_size;
-
-    struct perf_event_attr pe;
-    memset(&pe, 0, sizeof(pe));
-    pe.size        = sizeof(pe);
-    pe.type        = PERF_TYPE_HARDWARE;
-    pe.config      = PERF_COUNT_HW_CPU_CYCLES;
-    pe.sample_freq = 1000;              /* 约 1000 次采样 / 秒              */
-    pe.freq        = 1;                 /* 使用频率模式而非固定周期         */
-    pe.sample_type = PERF_SAMPLE_IP | PERF_SAMPLE_BRANCH_STACK;
-    pe.branch_sample_type =
-        PERF_SAMPLE_BRANCH_USER | PERF_SAMPLE_BRANCH_ANY;
-    pe.disabled       = 1;
-    pe.exclude_kernel = 1;
-    pe.exclude_hv     = 1;
-
-    /* 全系统模式必须绑定至具体 CPU；按进程模式设 cpu=-1 跟随线程 */
-    int cpu_lbr = (pid == -1) ? 0 : -1;
-    lbr_fd = perf_event_open(&pe, pid, cpu_lbr, -1, 0);
-    if (lbr_fd < 0) {
-        fprintf(stderr, "LBR perf_event_open failed: %s "
-                "(需要硬件 LBR 支持，Intel Haswell+ 或 AMD Zen3+)\n",
-                strerror(errno));
-        return 0;
-    }
-
-    /* 映射 1 个 meta 页 + LBR_MMAP_PAGES 个数据页 */
-    void *base = mmap(NULL, lbr_page_size + lbr_data_size,
-                      PROT_READ | PROT_WRITE, MAP_SHARED, lbr_fd, 0);
-    if (base == MAP_FAILED) {
-        fprintf(stderr, "LBR mmap failed: %s\n", strerror(errno));
-        close(lbr_fd);
-        lbr_fd = -1;
-        return 0;
-    }
-
-    lbr_meta     = (struct perf_event_mmap_page *)base;
-    lbr_data_buf = (char *)base + lbr_page_size;
-
-    ioctl(lbr_fd, PERF_EVENT_IOC_RESET,  0);
-    ioctl(lbr_fd, PERF_EVENT_IOC_ENABLE, 0);
-    return 1;
-}
-
-void lbr_drain(lbr_stats_t *stats)
-{
-    if (lbr_fd < 0 || !lbr_meta) return;
-
-    const char *data = (const char *)lbr_data_buf;
+    const char *data = (const char *)s->data_buf;
     size_t       mask = lbr_data_size - 1;
 
-    uint64_t head = lbr_meta->data_head;
+    uint64_t head = s->meta->data_head;
     __sync_synchronize(); /* rmb：确保在读取数据前看到最新的 head */
-    uint64_t tail = lbr_meta->data_tail;
+    uint64_t tail = s->meta->data_tail;
 
     while ((int64_t)(head - tail) > 0) {
         struct perf_event_header hdr;
@@ -163,7 +135,104 @@ void lbr_drain(lbr_stats_t *stats)
     }
 
     __sync_synchronize(); /* mb：确保写 data_tail 在读数据之后 */
-    lbr_meta->data_tail = tail;
+    s->meta->data_tail = tail;
+}
+
+/*
+ * open_lbr_slot — 为 pid/tid 申请一个 perf_event 并填入 idx 槽。
+ * 内核不允许 PERF_SAMPLE_BRANCH_STACK 与 inherit=1 同时使用（EINVAL），
+ * 因此始终以 inherit=0 打开，子线程须由外部监控层手动添加。
+ * 成功返回 1，失败返回 0（槽位内容未修改）。
+ */
+static int open_lbr_slot(int idx, pid_t tid)
+{
+    struct perf_event_attr pe;
+    memset(&pe, 0, sizeof(pe));
+    pe.size        = sizeof(pe);
+    pe.type        = PERF_TYPE_HARDWARE;
+    pe.config      = PERF_COUNT_HW_CPU_CYCLES;
+    pe.sample_freq = 1000;
+    pe.freq        = 1;
+    pe.sample_type = PERF_SAMPLE_IP | PERF_SAMPLE_BRANCH_STACK;
+    pe.branch_sample_type =
+        PERF_SAMPLE_BRANCH_USER | PERF_SAMPLE_BRANCH_ANY;
+    pe.disabled       = 1;
+    pe.exclude_kernel = 1;
+    pe.exclude_hv     = 1;
+    /* inherit 保持 0：LBR 不支持继承，子线程须通过 lbr_add_tid() 手动挂载 */
+
+    /* 全系统模式绑定 CPU 0；按进程 / 线程模式随线程迁移 */
+    int cpu = (tid == -1) ? 0 : -1;
+
+    int fd = perf_event_open(&pe, tid, cpu, -1, 0);
+    if (fd < 0) {
+        fprintf(stderr, "LBR perf_event_open(tid=%d) failed: %s "
+                "(需要硬件 LBR 支持，Intel Haswell+ 或 AMD Zen3+)\n",
+                (int)tid, strerror(errno));
+        return 0;
+    }
+
+    void *base = mmap(NULL, lbr_page_size + lbr_data_size,
+                      PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (base == MAP_FAILED) {
+        fprintf(stderr, "LBR mmap(tid=%d) failed: %s\n",
+                (int)tid, strerror(errno));
+        close(fd);
+        return 0;
+    }
+
+    lbr_slots[idx].tid      = tid;
+    lbr_slots[idx].fd       = fd;
+    lbr_slots[idx].meta     = (struct perf_event_mmap_page *)base;
+    lbr_slots[idx].data_buf = (char *)base + lbr_page_size;
+
+    ioctl(fd, PERF_EVENT_IOC_RESET,  0);
+    ioctl(fd, PERF_EVENT_IOC_ENABLE, 0);
+    return 1;
+}
+
+/*
+ * close_slot — 释放单个槽位的所有资源，并将其标记为未使用（fd=-1）。
+ */
+static void close_slot(lbr_slot_t *s)
+{
+    if (s->meta) {
+        munmap(s->meta, lbr_page_size + lbr_data_size);
+        s->meta     = NULL;
+        s->data_buf = NULL;
+    }
+    if (s->fd >= 0) {
+        close(s->fd);
+        s->fd = -1;
+    }
+    s->tid = 0;
+}
+
+/* ── 公共接口：标准模式 ──────────────────────────────────────────────────── */
+
+int lbr_init(pid_t pid)
+{
+    lbr_page_size = (size_t)sysconf(_SC_PAGESIZE);
+    lbr_data_size = (size_t)LBR_MMAP_PAGES * lbr_page_size;
+
+    memset(lbr_slots, 0, sizeof(lbr_slots));
+    for (int i = 0; i < MAX_LBR_SLOTS; i++)
+        lbr_slots[i].fd = -1;
+    lbr_slot_count = 0;
+
+    if (!open_lbr_slot(0, pid))
+        return 0;
+
+    lbr_slot_count = 1;
+    return 1;
+}
+
+void lbr_drain(lbr_stats_t *stats)
+{
+    for (int i = 0; i < lbr_slot_count; i++) {
+        if (lbr_slots[i].fd >= 0 && lbr_slots[i].meta)
+            drain_slot(&lbr_slots[i], stats);
+    }
 }
 
 void lbr_stats_reset(lbr_stats_t *stats)
@@ -175,13 +244,62 @@ void lbr_stats_reset(lbr_stats_t *stats)
 
 void lbr_close(void)
 {
-    if (lbr_meta) {
-        munmap(lbr_meta, lbr_page_size + lbr_data_size);
-        lbr_meta     = NULL;
-        lbr_data_buf = NULL;
+    for (int i = 0; i < lbr_slot_count; i++)
+        close_slot(&lbr_slots[i]);
+    lbr_slot_count = 0;
+}
+
+/* ── 公共接口：无继承模式 ────────────────────────────────────────────────── */
+
+int lbr_init_no_inherit(pid_t pid)
+{
+    lbr_page_size = (size_t)sysconf(_SC_PAGESIZE);
+    lbr_data_size = (size_t)LBR_MMAP_PAGES * lbr_page_size;
+
+    memset(lbr_slots, 0, sizeof(lbr_slots));
+    for (int i = 0; i < MAX_LBR_SLOTS; i++)
+        lbr_slots[i].fd = -1;
+    lbr_slot_count = 0;
+
+    if (!open_lbr_slot(0, pid))
+        return 0;
+
+    lbr_slot_count = 1;
+    return 1;
+}
+
+int lbr_add_tid(pid_t tid)
+{
+    if (lbr_slot_count >= MAX_LBR_SLOTS) {
+        fprintf(stderr, "lbr_add_tid: slot array full (limit=%d)\n",
+                MAX_LBR_SLOTS);
+        return 0;
     }
-    if (lbr_fd >= 0) {
-        close(lbr_fd);
-        lbr_fd = -1;
+
+    /* 防止重复添加同一 TID */
+    for (int i = 0; i < lbr_slot_count; i++) {
+        if (lbr_slots[i].fd >= 0 && lbr_slots[i].tid == tid)
+            return 1;   /* 已存在，幂等 */
+    }
+
+    int idx = lbr_slot_count;
+    if (!open_lbr_slot(idx, tid))
+        return 0;
+
+    lbr_slot_count++;
+    return 1;
+}
+
+void lbr_remove_tid(pid_t tid)
+{
+    for (int i = 0; i < lbr_slot_count; i++) {
+        if (lbr_slots[i].tid == tid && lbr_slots[i].fd >= 0) {
+            close_slot(&lbr_slots[i]);
+            /* 用最后一个槽位填洞，保持数组紧凑 */
+            if (i < lbr_slot_count - 1)
+                lbr_slots[i] = lbr_slots[lbr_slot_count - 1];
+            lbr_slot_count--;
+            return;
+        }
     }
 }

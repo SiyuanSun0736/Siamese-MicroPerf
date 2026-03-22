@@ -6,7 +6,8 @@ SRCDIR  := src
 SRCS    := $(SRCDIR)/main.c \
            $(SRCDIR)/pmu_counters.c \
            $(SRCDIR)/lbr.c \
-           $(SRCDIR)/output.c
+           $(SRCDIR)/output.c \
+           $(SRCDIR)/tid_monitor.c
 OBJS    := $(SRCS:.c=.o)
 TARGET  := pmu_monitor
 
