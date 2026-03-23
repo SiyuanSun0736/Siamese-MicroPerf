@@ -42,18 +42,66 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-VARIANT="${VARIANT:-O3-bolt}"
-OUT_VARIANT="${OUT_VARIANT:-${VARIANT}-opt}"
-BIN_DIR="${BIN_DIR:-$SCRIPT_DIR/bin/$VARIANT}"
-OUT_DIR="${OUT_DIR:-$SCRIPT_DIR/bin/$OUT_VARIANT}"
-TEST_DIR="${TEST_DIR:-$SCRIPT_DIR/test/$VARIANT}"
-PROFILE_DIR="${PROFILE_DIR:-$SCRIPT_DIR/bolt_profiles/$VARIANT}"
+VARIANT="${VARIANT:-O2-bolt}"
+OUT_VARIANT="${OUT_VARIANT:-}"       # 依赖 VARIANT，在 getopts 后填充
+BIN_DIR="${BIN_DIR:-}"               # 依赖 VARIANT，在 getopts 后填充
+OUT_DIR="${OUT_DIR:-}"               # 依赖 OUT_VARIANT，在 getopts 后填充
+TEST_DIR="${TEST_DIR:-}"             # 依赖 VARIANT，在 getopts 后填充
+OUT_TEST_DIR="${OUT_TEST_DIR:-}"     # 依赖 OUT_VARIANT，在 getopts 后填充
+PROFILE_DIR="${PROFILE_DIR:-}"       # 依赖 VARIANT，在 getopts 后填充
 
 PMU_WINDOW="${PMU_WINDOW:-30}"
 USE_INSTRUMENTATION="${USE_INSTRUMENTATION:-0}"
 OVERWRITE="${OVERWRITE:-0}"
 DRYRUN="${DRYRUN:-0}"
 BOLT_EXTRA_FLAGS="${BOLT_EXTRA_FLAGS:-}"
+
+# ── 参数解析 ─────────────────────────────────────────────────────────────────
+usage() {
+    echo "用法: $0 [-v VARIANT] [-V OUT_VARIANT] [-b BIN_DIR] [-o OUT_DIR]"
+    echo "         [-t TEST_DIR] [-T OUT_TEST_DIR] [-p PROFILE_DIR]"
+    echo "         [-w PMU_WINDOW] [-I] [-r] [-n]"
+    echo "选项:"
+    echo "  -v VARIANT      源变体名称（默认 O2-bolt）"
+    echo "  -V OUT_VARIANT  输出变体名称（默认 <VARIANT>-opt）"
+    echo "  -b BIN_DIR      输入二进制目录"
+    echo "  -o OUT_DIR      输出二进制目录"
+    echo "  -t TEST_DIR     测试规格目录"
+    echo "  -T OUT_TEST_DIR 输出测试目录"
+    echo "  -p PROFILE_DIR  perf/fdata 临时目录"
+    echo "  -w PMU_WINDOW   采样时长，秒（默认 30）"
+    echo "  -I              使用插桩模式（无 LBR）"
+    echo "  -r              覆盖已有优化二进制"
+    echo "  -n              DRYRUN 模式"
+    echo "  -h              显示帮助"
+    exit 0
+}
+
+while getopts "v:V:b:o:t:T:p:w:Irnh" opt; do
+    case $opt in
+        v) VARIANT="$OPTARG" ;;
+        V) OUT_VARIANT="$OPTARG" ;;
+        b) BIN_DIR="$OPTARG" ;;
+        o) OUT_DIR="$OPTARG" ;;
+        t) TEST_DIR="$OPTARG" ;;
+        T) OUT_TEST_DIR="$OPTARG" ;;
+        p) PROFILE_DIR="$OPTARG" ;;
+        w) PMU_WINDOW="$OPTARG" ;;
+        I) USE_INSTRUMENTATION=1 ;;
+        r) OVERWRITE=1 ;;
+        n) DRYRUN=1 ;;
+        h) usage ;;
+        *) echo "未知选项：-$OPTARG" >&2; exit 1 ;;
+    esac
+done
+
+# 用最终 VARIANT / OUT_VARIANT 填充未显式指定的依赖项
+[[ -z "$OUT_VARIANT"  ]] && OUT_VARIANT="${VARIANT}-opt"
+[[ -z "$BIN_DIR"      ]] && BIN_DIR="$SCRIPT_DIR/bin/$VARIANT"
+[[ -z "$OUT_DIR"      ]] && OUT_DIR="$SCRIPT_DIR/bin/$OUT_VARIANT"
+[[ -z "$TEST_DIR"     ]] && TEST_DIR="$SCRIPT_DIR/test/$VARIANT"
+[[ -z "$OUT_TEST_DIR" ]] && OUT_TEST_DIR="$SCRIPT_DIR/test/$OUT_VARIANT"
+[[ -z "$PROFILE_DIR"  ]] && PROFILE_DIR="$SCRIPT_DIR/bolt_profiles/$VARIANT"
 
 # ── 颜色 ─────────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -128,7 +176,7 @@ if [[ "$USE_INSTRUMENTATION" -eq 0 ]] && ! command -v perf &>/dev/null; then
     echo "Error: perf 未找到，请安装 linux-perf 或设置 USE_INSTRUMENTATION=1" >&2; exit 1
 fi
 
-[[ "$DRYRUN" -eq 1 ]] || mkdir -p "$OUT_DIR" "$PROFILE_DIR"
+[[ "$DRYRUN" -eq 1 ]] || mkdir -p "$OUT_DIR" "$OUT_TEST_DIR" "$PROFILE_DIR"
 
 # ── 统计 ─────────────────────────────────────────────────────────────────────
 COUNT_TOTAL=0; COUNT_OK=0; COUNT_SKIP=0; COUNT_FAIL=0
@@ -139,6 +187,7 @@ bold "======================================================"
 info "BIN_DIR:      $BIN_DIR"
 info "OUT_DIR:      $OUT_DIR"
 info "TEST_DIR:     $TEST_DIR"
+info "OUT_TEST_DIR: $OUT_TEST_DIR"
 info "PROFILE_DIR:  $PROFILE_DIR"
 info "采样时长:     ${PMU_WINDOW}s"
 info "采样模式:     $( [[ $USE_INSTRUMENTATION -eq 1 ]] && echo '插桩 (instrumentation)' || echo 'LBR (perf record)')"
@@ -280,11 +329,18 @@ for test_subdir in "$TEST_DIR"/*/; do
         if [[ -x "$out_binary" ]]; then
             pass "$bench_name  →  ${out_binary#$PROJECT_ROOT/}"
             ((COUNT_OK++)) || true
+            # ── 复制测试文件到 OUT_TEST_DIR ──────────────────────────────────
+            out_test_subdir="$OUT_TEST_DIR/$bench_name"
+            if [[ -d "$test_subdir" ]]; then
+                cp -r "$test_subdir" "$out_test_subdir"
+                info "  测试文件已复制 → ${out_test_subdir#$PROJECT_ROOT/}"
+            fi
         else
             err "llvm-bolt 未生成可执行文件: $out_binary"
             ((COUNT_FAIL++)) || true
         fi
     else
+        run_cmd "cp -r '$test_subdir' '$OUT_TEST_DIR/$bench_name'"
         pass "$bench_name  [DRYRUN OK]"
         ((COUNT_OK++)) || true
     fi
@@ -295,5 +351,7 @@ done
 bold "======================================================"
 bold "汇总：总计 $COUNT_TOTAL  |  成功 $COUNT_OK  |  跳过 $COUNT_SKIP  |  失败 $COUNT_FAIL"
 bold "======================================================"
-[[ "$DRYRUN" -eq 0 && $COUNT_OK -gt 0 ]] && \
+[[ "$DRYRUN" -eq 0 && $COUNT_OK -gt 0 ]] && {
     info "优化二进制已写入: $OUT_DIR"
+    info "测试文件已复制到: $OUT_TEST_DIR"
+}

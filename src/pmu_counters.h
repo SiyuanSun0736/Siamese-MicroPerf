@@ -17,10 +17,14 @@
 typedef struct {
     int         fd;
     const char *name;
-    uint64_t    count;         /* 本采样周期缩放后的计数值                  */
+    uint64_t    count;         /* 本采样周期区间增量（已按复用比缩放）      */
     int         enabled;       /* fd 成功打开则为 1                         */
-    uint64_t    time_enabled;  /* 上次读取的 time_enabled（纳秒）           */
-    uint64_t    time_running;  /* 上次读取的 time_running（纳秒）           */
+    uint64_t    time_enabled;  /* 本区间 time_enabled 增量（纳秒）          */
+    uint64_t    time_running;  /* 本区间 time_running 增量（纳秒）          */
+    /* 差值计算：上一轮 read() 返回的原始累计量 */
+    uint64_t    prev_raw;          /* 上一次 read() 的原始累计计数          */
+    uint64_t    prev_time_enabled; /* 上一次 read() 的累计 time_enabled     */
+    uint64_t    prev_time_running; /* 上一次 read() 的累计 time_running     */
 } perf_counter_t;
 
 #define PMU_NUM_COUNTERS 6
@@ -43,7 +47,11 @@ int  pmu_init(pid_t pid, int cpu);
 void pmu_read(void);
 
 /*
- * pmu_reset — 向内核发送 PERF_EVENT_IOC_RESET，将计数器归零。
+ * pmu_reset — 读取并锁存当前累计值作为下一轮差值计算的基线。
+ *             在 pmu_init() 完成、采样循环开始前调用一次，
+ *             以避免第一个区间包含初始化期间的计数。
+ *             （不再向内核发送 PERF_EVENT_IOC_RESET，
+ *               原 ioctl 重置无法覆盖 inherit 子进程的累计值）
  */
 void pmu_reset(void);
 

@@ -195,8 +195,7 @@ int main(int argc, char **argv)
     output_csv_header(log_file);
 
     /* ---- 打印启动信息 ---- */
-    printf("=== PMU Monitor ===\n");
-    printf("Target PID : %d%s\n", target_pid,
+    printf("=== PMU Monitor ===\n");    printf("Target PID : %d%s\n", target_pid,
            target_pid == -1 ? " (system-wide)" : "");
     printf("Interval   : %ld ms\n", interval_ms);
     printf("Log file   : %s\n", ts_filename);
@@ -226,6 +225,10 @@ int main(int argc, char **argv)
     if (timerfd_settime(timer_fd, 0, &its, NULL) < 0) {
         perror("timerfd_settime"); return 1;
     }
+
+    /* 在采样循环开始前锁存当前累计值作为差值基线，
+     * 确保第一个区间不包含初始化阶段的计数。 */
+    pmu_reset();
 
     uint64_t start_ms = now_ms();
 
@@ -278,9 +281,8 @@ int main(int argc, char **argv)
                  sizeof(wall_str) - strlen(wall_str),
                  ".%03ld", wall.tv_nsec / 1000000L);
 
-        /* 读取 PMU 计数器（含多路复用缩放）*/
+        /* 读取 PMU 计数器（差值计算，已含多路复用区间缩放）*/
         pmu_read();
-        pmu_reset();
 
         /* 排空 LBR ring buffer，计算本周期派生指标 */
         lbr_drain(&lbr_stats);

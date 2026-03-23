@@ -18,7 +18,7 @@
 # 选项：
 #   -b <BUILD_DIR>   build 目录名（默认：build-O1-g）
 #   -s <MS_SUBDIR>   MultiSource 子目录（默认：Applications）
-#   -v <VERSION>     版本后缀（默认：v1）
+#   -v <VERSION>     版本后缀（默认：O1-g）
 #   -o <OUT_DIR>     ELF 输出目录（默认：train_set/bin/$VERSION）
 #   -t <TEST_DIR>    测试文件输出目录（默认：train_set/test/$VERSION）
 #   -n               仅预览，不实际复制（dry-run）
@@ -26,9 +26,9 @@
 #
 # 示例：
 #   bash train_set/extract_elf.sh
-#   bash train_set/extract_elf.sh -b build-O3-g -v v2
-#   bash train_set/extract_elf.sh -b build-O3-bolt -s Benchmarks -v v2 -o train_set/bin_bolt
-#   bash train_set/extract_elf.sh -b build-O1-g -s Applications -v v1 -n
+#   bash train_set/extract_elf.sh -b build-O3-g -v O3-g
+#   bash train_set/extract_elf.sh -b build-O3-bolt -s Benchmarks -v O3-bolt -o train_set/bin_bolt
+#   bash train_set/extract_elf.sh -b build-O1-g -s Applications -v O1-g -n
 # =============================================================================
 
 set -euo pipefail
@@ -37,13 +37,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # ── 默认参数 ──────────────────────────────────────────────────────────────────
-VERSION="O3-bolt"
-BUILD_DIR="build-$VERSION"
-MS_SUBDIR="Applications"
+VERSION="O2-bolt"
+BUILD_DIR=""       # 依赖 VERSION，在 getopts 后填充
+MS_SUBDIR="Benchmarks"
 # MultiSource 目录名（允许用户修改，例如 "MultiSource" 或 "MultiSource-custom"）
 MULTI_DIR="MultiSource"
-OUT_DIR="$SCRIPT_DIR/bin/$VERSION"
-TEST_DIR="$SCRIPT_DIR/test/$VERSION"
+OUT_DIR=""         # 依赖 VERSION，在 getopts 后填充
+TEST_DIR=""        # 依赖 VERSION，在 getopts 后填充
 DRY_RUN=0
 # 命名方案：
 #  - dir  : 使用所在目录层级（默认，保持与现有脚本一致）
@@ -70,6 +70,11 @@ while getopts "b:s:m:v:o:t:f:nh" opt; do
         *) echo "未知选项：-$OPTARG" >&2; exit 1 ;;
     esac
 done
+
+# 用最终 VERSION 填充未显式指定的依赖项
+[[ -z "$BUILD_DIR" ]] && BUILD_DIR="build-$VERSION"
+[[ -z "$OUT_DIR"   ]] && OUT_DIR="$SCRIPT_DIR/bin/$VERSION"
+[[ -z "$TEST_DIR"  ]] && TEST_DIR="$SCRIPT_DIR/test/$VERSION"
 
 SEARCH_ROOT="$PROJECT_ROOT/llvm-test-suite/$BUILD_DIR/${MULTI_DIR}/$MS_SUBDIR"
 

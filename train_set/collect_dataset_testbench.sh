@@ -67,12 +67,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-VARIANT="${VARIANT:-O3-g}"
-BIN_DIR="${BIN_DIR:-$SCRIPT_DIR/bin/$VARIANT}"
-TEST_DIR="${TEST_DIR:-$SCRIPT_DIR/test/$VARIANT}"
-DATA_DIR="${DATA_DIR:-$SCRIPT_DIR/data/$VARIANT}"
+VARIANT="${VARIANT:-O2-bolt}"
+BIN_DIR="${BIN_DIR:-}"       # 依赖 VARIANT，在 getopts 后填充
+TEST_DIR="${TEST_DIR:-}"     # 依赖 VARIANT，在 getopts 后填充
+DATA_DIR="${DATA_DIR:-}"     # 依赖 VARIANT，在 getopts 后填充
+MANIFEST="${MANIFEST:-}"     # 依赖 VARIANT，在 getopts 后填充
 PMU_MONITOR="${PMU_MONITOR:-$PROJECT_ROOT/pmu_monitor}"
-MANIFEST="${MANIFEST:-$SCRIPT_DIR/manifest_${VARIANT}.jsonl}"
 
 PMU_WINDOW="${PMU_WINDOW:-30}"
 INTERVAL_MS="${INTERVAL_MS:-500}"
@@ -83,6 +83,47 @@ RETRY_MAX="${RETRY_MAX:-3}"
 DRYRUN="${DRYRUN:-0}"
 LBR_TID_MON="${LBR_TID_MON:-1}"
 PRINT_TIME_FIELDS="${PRINT_TIME_FIELDS:-0}"
+
+# ── 参数解析 ─────────────────────────────────────────────────────────────────
+usage() {
+    echo "用法: $0 [-v VARIANT] [-b BIN_DIR] [-t TEST_DIR] [-d DATA_DIR]"
+    echo "         [-w PMU_WINDOW] [-i INTERVAL_MS] [-c] [-r] [-n]"
+    echo "选项:"
+    echo "  -v VARIANT      变体名称（默认 O2-bolt）"
+    echo "  -b BIN_DIR      可执行文件目录"
+    echo "  -t TEST_DIR     测试规格目录"
+    echo "  -d DATA_DIR     PMU CSV 输出目录"
+    echo "  -w PMU_WINDOW   采集时长，秒（默认 30）"
+    echo "  -i INTERVAL_MS  采样间隔，毫秒（默认 500）"
+    echo "  -c              持续循环模式"
+    echo "  -r              覆盖已有数据"
+    echo "  -n              DRYRUN 模式"
+    echo "  -h              显示帮助"
+    exit 0
+}
+
+while getopts "v:b:t:d:w:i:crnhT" opt; do
+    case $opt in
+        v) VARIANT="$OPTARG" ;;
+        b) BIN_DIR="$OPTARG" ;;
+        t) TEST_DIR="$OPTARG" ;;
+        d) DATA_DIR="$OPTARG" ;;
+        w) PMU_WINDOW="$OPTARG" ;;
+        i) INTERVAL_MS="$OPTARG" ;;
+        c) CONTINUOUS=1 ;;
+        r) OVERWRITE=1 ;;
+        n) DRYRUN=1 ;;
+        T) LBR_TID_MON=1 ;;
+        h) usage ;;
+        *) echo "未知选项：-$OPTARG" >&2; exit 1 ;;
+    esac
+done
+
+# 用最终 VARIANT 填充未显式指定的依赖项
+[[ -z "$BIN_DIR"  ]] && BIN_DIR="$SCRIPT_DIR/bin/$VARIANT"
+[[ -z "$TEST_DIR" ]] && TEST_DIR="$SCRIPT_DIR/test/$VARIANT"
+[[ -z "$DATA_DIR" ]] && DATA_DIR="$SCRIPT_DIR/data/$VARIANT"
+[[ -z "$MANIFEST" ]] && MANIFEST="$SCRIPT_DIR/manifest_${VARIANT}.jsonl"
 
 # ── 颜色 ─────────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'

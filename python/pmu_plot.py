@@ -143,6 +143,7 @@ def mux_correction(df: pd.DataFrame, col: str) -> pd.Series:
     计算每个 500ms 区间的多路复用修正系数
         correction = Δtime_enabled / Δtime_running
     当 time_running 趋近于 time_enabled 时修正系数 ≈ 1（无多路复用）。
+    仅当 CSV 中含有 <col>_time_enabled / <col>_time_running 列时才有效。
     """
     te = df[f"{col}_time_enabled"]
     tr = df[f"{col}_time_running"]
@@ -151,14 +152,20 @@ def mux_correction(df: pd.DataFrame, col: str) -> pd.Series:
     return d_te / d_tr.clip(lower=1)   # 防止除以 0
 
 
-def load_and_prepare(csv_path: str) -> pd.DataFrame:
+def _has_mux_columns(df: pd.DataFrame, col: str) -> bool:
+    """检查 DataFrame 是否包含指定计数器的 time_enabled / time_running 列"""
+    return (f"{col}_time_enabled" in df.columns and
+            f"{col}_time_running" in df.columns)
+
+
+def load_and_prepare(csv_path: str, use_mux: bool = False) -> pd.DataFrame:
     df = pd.read_csv(csv_path)
     df = df.copy()
 
     # 时间（秒）
     df["time_s"] = df["elapsed_ms"] / 1000.0
 
-    # 多路复用修正后的关键计数器
+    # 关键计数器（可选多路复用修正）
     for col in [
         "inst_retired.any",
         "branch-instructions",
@@ -167,7 +174,10 @@ def load_and_prepare(csv_path: str) -> pd.DataFrame:
         "iTLB-loads",
         "iTLB-load-misses",
     ]:
-        df[f"{col}_corr"] = df[col] * mux_correction(df, col)
+        if use_mux and _has_mux_columns(df, col):
+            df[f"{col}_corr"] = df[col] * mux_correction(df, col)
+        else:
+            df[f"{col}_corr"] = df[col]
 
     # 分支预测失效率（%），分母为修正后的分支指令数
     denom = df["branch-instructions_corr"].replace(0, np.nan)
@@ -182,8 +192,9 @@ def load_and_prepare(csv_path: str) -> pd.DataFrame:
 
 # ── 主绘图函数 ────────────────────────────────────────────────────────
 
-def plot(csv_path: str, output_path: str, show_phases: bool = True):
-    df = load_and_prepare(csv_path)
+def plot(csv_path: str, output_path: str, show_phases: bool = True,
+         use_mux: bool = False):
+    df = load_and_prepare(csv_path, use_mux=use_mux)
     # 明确转换为 numpy float 数组，避免类型检查将 pandas.Series 视为混合类型
     t = df["time_s"].to_numpy(dtype=float)
     max_ms = float(df["elapsed_ms"].max())
@@ -191,10 +202,11 @@ def plot(csv_path: str, output_path: str, show_phases: bool = True):
 
     # ── 图形布局：4 行 × 2 列 ─────────────────────────────────────────
     fig = plt.figure(figsize=(17, 20))
+    mux_note = "mux-corrected" if use_mux else "raw counts"
     fig.suptitle(
         "PMU Monitor — Performance Counters Time Series\n"
         f"File: {Path(csv_path).name}   "
-        f"Sample interval: 500 ms   Duration: {max_ms/1000:.0f} s",
+        f"Sample interval: 500 ms   Duration: {max_ms/1000:.0f} s   [{mux_note}]",
         fontsize=12, fontweight="bold", y=0.995,
     )
 
@@ -394,6 +406,16 @@ def main():
         action="store_true",
         help="不绘制阶段背景色带",
     )
+    parser.add_argument(
+        "--use-mux",
+        action="store_true",
+        default=False,
+        help=(
+            "使用 CSV 中的 <counter>_time_enabled / <counter>_time_running 列\n"
+            "对计数器进行多路复用修正（需用 pmu_monitor --time-fields 采集）。\n"
+            "默认关闭，直接使用原始计数值。"
+        ),
+    )
     args = parser.parse_args()
 
     csv_path = args.csv
@@ -401,7 +423,21 @@ def main():
         print(f"[Error] 找不到文件: {csv_path}", file=sys.stderr)
         sys.exit(1)
 
-    plot(csv_path, args.output, show_phases=not args.no_phases)
+    if args.use_mux:
+        # 检查第一个计数器列是否真的有 time 字段，否则提前警告
+        import pandas as _pd
+        _sample = _pd.read_csv(csv_path, nrows=1)
+        if not _has_mux_columns(_sample, "inst_retired.any"):
+            print(
+                "[Warning] --use-mux 已指定，但 CSV 中未找到 "
+                "inst_retired.any_time_enabled 列。\n"
+                "         请用 pmu_monitor --time-fields 重新采集，或去掉 --use-mux。",
+                file=sys.stderr,
+            )
+
+    plot(csv_path, args.output,
+         show_phases=not args.no_phases,
+         use_mux=args.use_mux)
 
 
 if __name__ == "__main__":
