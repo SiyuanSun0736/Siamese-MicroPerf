@@ -1,0 +1,342 @@
+#!/usr/bin/env python3
+"""
+build_dataset.py — 异构特征对齐与张量构造
+==========================================
+
+根据 README §1–§2 的流程，读取 train_set/data 下的 PMU CSV 数据，
+对三组版本对执行特征工程，生成可直接用于 Siamese 网络训练的 PyTorch 张量。
+
+版本对
+------
+  Pair 1: (O1-g,      O3-g)         — 不同编译优化等级
+  Pair 2: (O2-bolt,   O2-bolt-opt)  — BOLT 优化前后
+  Pair 3: (O3-bolt,   O3-bolt-opt)  — BOLT 优化前后
+
+特征工程流水线
+--------------
+  1. PMU 标度统一：将原始计数器转换为 MPKI = C_t / I_t × 1000
+     - L1-icache-load-misses  → icache_miss_mpki
+     - iTLB-loads             → itlb_load_mpki
+     - iTLB-load-misses       → itlb_miss_mpki
+     - branch-instructions    → branch_inst_mpki
+     - branch-misses          → branch_miss_mpki
+  2. LBR 极值压缩：直接使用 CSV 中已计算好的 lbr_log1p_span = log(1 + avg_span)
+  3. Z-score 标准化：对全局训练集的每个特征维度计算 μ/σ，逐特征归一化
+  4. 拼接输出双塔张量 X_v1, X_v2 ∈ R^{T×D}，标签 Y = N_v1 / N_v2
+
+输出
+----
+  train_set/tensors/<pair_name>/
+    X_v1.pt    — shape (N_samples, T, D) float32
+    X_v2.pt    — shape (N_samples, T, D) float32
+    Y.pt       — shape (N_samples,) float32      回归标签
+    programs.json  — 样本索引 → 程序名映射
+    stats.json     — 归一化统计量 { μ, σ, feature_names }
+
+用法
+----
+  python3 python/build_dataset.py                        # 默认参数
+  python3 python/build_dataset.py --seq-len 60           # 指定序列长度
+  python3 python/build_dataset.py --no-zscore            # 跳过 Z-score
+  python3 python/build_dataset.py --pairs O1-g:O3-g      # 只处理指定对
+"""
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import torch
+
+# ── 常量 ──────────────────────────────────────────────────────────────────────
+
+# 需要转换为 MPKI 的原始 PMU 列 → 输出特征名
+PMU_COUNTER_COLS = {
+    "L1-icache-load-misses": "icache_miss_mpki",
+    "iTLB-loads":            "itlb_load_mpki",
+    "iTLB-load-misses":      "itlb_miss_mpki",
+    "branch-instructions":   "branch_inst_mpki",
+    "branch-misses":         "branch_miss_mpki",
+}
+
+# MPKI 除法的分母列
+INST_COL = "inst_retired.any"
+
+# LBR 已压缩特征（CSV 中已计算好的 log(1 + avg_span)）
+LBR_FEATURE_COL = "lbr_log1p_span"
+
+# 三组默认版本对
+DEFAULT_PAIRS = [
+    ("O1-g",    "O3-g"),
+    ("O2-bolt", "O2-bolt-opt"),
+    ("O3-bolt", "O3-bolt-opt"),
+]
+
+
+# ── 辅助函数 ──────────────────────────────────────────────────────────────────
+
+def load_manifest(manifest_path: Path) -> dict[str, dict]:
+    """读取 manifest JSONL，返回 { program_name: {variant, csv, run_count, ...} }"""
+    entries = {}
+    with open(manifest_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            d = json.loads(line)
+            entries[d["program"]] = d
+    return entries
+
+
+def extract_features(csv_path: Path, seq_len: int) -> np.ndarray | None:
+    """
+    从单个 PMU CSV 提取特征矩阵 (T, D)。
+
+    步骤：
+      1. 读取 CSV，丢弃 elapsed_ms / timestamp 元数据列
+      2. 将 5 个 PMU 计数器转为 MPKI（C_t / I_t × 1000）
+      3. 保留 lbr_log1p_span 作为 LBR 特征
+      4. 截断或填充到 seq_len 行
+
+    返回 np.ndarray (seq_len, D)，失败返回 None。
+    """
+    try:
+        df = pd.read_csv(csv_path)
+    except Exception as e:
+        print(f"  [WARN] 无法读取 {csv_path}: {e}", file=sys.stderr)
+        return None
+
+    # 检查必要列
+    required = [INST_COL, LBR_FEATURE_COL] + list(PMU_COUNTER_COLS.keys())
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        print(f"  [WARN] {csv_path} 缺少列: {missing}", file=sys.stderr)
+        return None
+
+    # 取指令数作为 MPKI 分母，避免除零
+    inst: np.ndarray = df[INST_COL].to_numpy(dtype=np.float64)
+    inst = np.where(inst == 0, 1.0, inst)  # 防止除零
+
+    features = []
+
+    # PMU → MPKI
+    for raw_col, _feat_name in PMU_COUNTER_COLS.items():
+        mpki = df[raw_col].values.astype(np.float64) / inst * 1000.0
+        features.append(mpki)
+
+    # LBR 压缩特征（已在 CSV 中计算好）
+    lbr = df[LBR_FEATURE_COL].values.astype(np.float64)
+    features.append(lbr)
+
+    # (T_raw, D)
+    feat_matrix = np.column_stack(features)
+    T_raw, D = feat_matrix.shape
+
+    # 截断或零填充到 seq_len
+    if T_raw >= seq_len:
+        feat_matrix = feat_matrix[:seq_len]
+    else:
+        pad = np.zeros((seq_len - T_raw, D), dtype=np.float64)
+        feat_matrix = np.concatenate([feat_matrix, pad], axis=0)
+
+    return feat_matrix.astype(np.float32)
+
+
+def build_pair_dataset(
+    v1_name: str,
+    v2_name: str,
+    project_root: Path,
+    seq_len: int,
+) -> tuple[list[np.ndarray], list[np.ndarray], list[float], list[str]]:
+    """
+    为一个版本对构建数据集。
+
+    返回:
+      X_v1_list  — 每个元素 shape (T, D)
+      X_v2_list  — 每个元素 shape (T, D)
+      Y_list     — 标签列表 (N_v1 / N_v2)
+      programs   — 程序名列表
+    """
+    manifest_dir = project_root / "train_set"
+
+    m1_path = manifest_dir / f"manifest_{v1_name}.jsonl"
+    m2_path = manifest_dir / f"manifest_{v2_name}.jsonl"
+
+    if not m1_path.exists():
+        print(f"  [ERROR] manifest 不存在: {m1_path}", file=sys.stderr)
+        return [], [], [], []
+    if not m2_path.exists():
+        print(f"  [ERROR] manifest 不存在: {m2_path}", file=sys.stderr)
+        return [], [], [], []
+
+    m1 = load_manifest(m1_path)
+    m2 = load_manifest(m2_path)
+
+    common_programs = sorted(set(m1.keys()) & set(m2.keys()))
+    if not common_programs:
+        print(f"  [WARN] {v1_name} 与 {v2_name} 无公共程序", file=sys.stderr)
+        return [], [], [], []
+
+    X_v1_list, X_v2_list, Y_list, programs = [], [], [], []
+
+    for prog in common_programs:
+        entry1, entry2 = m1[prog], m2[prog]
+
+        csv1 = project_root / entry1["csv"]
+        csv2 = project_root / entry2["csv"]
+
+        if not csv1.exists() or not csv2.exists():
+            print(f"  [SKIP] {prog}: CSV 文件缺失 "
+                  f"(v1={csv1.exists()}, v2={csv2.exists()})")
+            continue
+
+        feat1 = extract_features(csv1, seq_len)
+        feat2 = extract_features(csv2, seq_len)
+
+        if feat1 is None or feat2 is None:
+            continue
+
+        # 标签 Y = N_v1 / N_v2
+        n1 = entry1.get("run_count", 0)
+        n2 = entry2.get("run_count", 0)
+        if n2 == 0:
+            print(f"  [SKIP] {prog}: v2 run_count=0，无法计算标签")
+            continue
+
+        Y = float(n1) / float(n2)
+
+        X_v1_list.append(feat1)
+        X_v2_list.append(feat2)
+        Y_list.append(Y)
+        programs.append(prog)
+
+    return X_v1_list, X_v2_list, Y_list, programs
+
+
+# ── 主流程 ────────────────────────────────────────────────────────────────────
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="异构特征对齐与张量构造 (Feature Engineering)")
+    parser.add_argument(
+        "--project-root", type=Path, default=Path(__file__).resolve().parent.parent,
+        help="项目根目录（默认自动检测）")
+    parser.add_argument(
+        "--seq-len", type=int, default=60,
+        help="统一序列长度 T（默认 60，即 30s/500ms）")
+    parser.add_argument(
+        "--pairs", nargs="*", default=None,
+        help="版本对列表，格式 v1:v2（默认三组）")
+    parser.add_argument(
+        "--no-zscore", action="store_true",
+        help="跳过 Z-score 标准化")
+    parser.add_argument(
+        "--output-dir", type=Path, default=None,
+        help="输出目录（默认 train_set/tensors）")
+    args = parser.parse_args()
+
+    project_root = args.project_root
+    output_base = args.output_dir or (project_root / "train_set" / "tensors")
+
+    # 解析版本对
+    if args.pairs:
+        pairs = []
+        for p in args.pairs:
+            parts = p.split(":")
+            if len(parts) != 2:
+                print(f"[ERROR] 版本对格式错误: {p}，应为 v1:v2", file=sys.stderr)
+                sys.exit(1)
+            pairs.append((parts[0], parts[1]))
+    else:
+        pairs = DEFAULT_PAIRS
+
+    feature_names = list(PMU_COUNTER_COLS.values()) + [LBR_FEATURE_COL]
+    D = len(feature_names)
+
+    print(f"项目根目录: {project_root}")
+    print(f"序列长度 T: {args.seq_len}")
+    print(f"特征维度 D: {D}  {feature_names}")
+    print(f"Z-score:    {'开启' if not args.no_zscore else '关闭'}")
+    print(f"版本对:     {pairs}")
+    print()
+
+    for v1_name, v2_name in pairs:
+        pair_name = f"{v1_name}_vs_{v2_name}"
+        print(f"{'='*60}")
+        print(f"构建 Pair: {v1_name} vs {v2_name}")
+        print(f"{'='*60}")
+
+        X_v1_list, X_v2_list, Y_list, programs = build_pair_dataset(
+            v1_name, v2_name, project_root, args.seq_len)
+
+        if not programs:
+            print(f"  [WARN] 无有效样本，跳过此对\n")
+            continue
+
+        N = len(programs)
+        print(f"  有效样本数: {N}")
+
+        # 堆叠为 (N, T, D)
+        X_v1 = np.stack(X_v1_list, axis=0)  # (N, T, D)
+        X_v2 = np.stack(X_v2_list, axis=0)  # (N, T, D)
+        Y = np.array(Y_list, dtype=np.float32)  # (N,)
+
+        # Z-score 标准化：在全局（两个版本合并）上计算 μ/σ
+        if not args.no_zscore:
+            # 合并 v1 和 v2 计算统计量，shape (2*N, T, D) → 在 (样本, 时间步) 两轴上求均值
+            combined = np.concatenate([X_v1, X_v2], axis=0)  # (2N, T, D)
+            mu = combined.mean(axis=(0, 1))   # (D,)
+            sigma = combined.std(axis=(0, 1)) # (D,)
+            # 防止除零：标准差为 0 的特征保持原值
+            sigma = np.where(sigma == 0, 1.0, sigma)
+
+            X_v1 = (X_v1 - mu) / sigma
+            X_v2 = (X_v2 - mu) / sigma
+        else:
+            mu = np.zeros(D, dtype=np.float32)
+            sigma = np.ones(D, dtype=np.float32)
+
+        # 转为 PyTorch 张量
+        X_v1_tensor = torch.from_numpy(X_v1.astype(np.float32))
+        X_v2_tensor = torch.from_numpy(X_v2.astype(np.float32))
+        Y_tensor = torch.from_numpy(Y)
+
+        # 输出目录
+        out_dir = output_base / pair_name
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        torch.save(X_v1_tensor, out_dir / "X_v1.pt")
+        torch.save(X_v2_tensor, out_dir / "X_v2.pt")
+        torch.save(Y_tensor, out_dir / "Y.pt")
+
+        # 程序名映射
+        with open(out_dir / "programs.json", "w") as f:
+            json.dump(programs, f, indent=2)
+
+        # 归一化统计量（推理时需要复用）
+        stats = {
+            "feature_names": feature_names,
+            "mu": mu.tolist(),
+            "sigma": sigma.tolist(),
+            "seq_len": args.seq_len,
+            "v1": v1_name,
+            "v2": v2_name,
+            "n_samples": N,
+        }
+        with open(out_dir / "stats.json", "w") as f:
+            json.dump(stats, f, indent=2)
+
+        print(f"  X_v1: {X_v1_tensor.shape}  X_v2: {X_v2_tensor.shape}  "
+              f"Y: {Y_tensor.shape}")
+        print(f"  Y 统计: min={Y.min():.4f}  max={Y.max():.4f}  "
+              f"mean={Y.mean():.4f}  std={Y.std():.4f}")
+        print(f"  输出: {out_dir}")
+        print()
+
+    print("全部完成。")
+
+
+if __name__ == "__main__":
+    main()
