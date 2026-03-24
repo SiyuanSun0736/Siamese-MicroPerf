@@ -1,6 +1,6 @@
 #!/bin/bash
 
-VARIANT="${VARIANT:-O2-bolt}"
+VARIANT="${VARIANT:-O3-bolt}"
 
 sudo rm -rf ./test/$VARIANT/*
 sudo rm -rf ./data/$VARIANT/*
