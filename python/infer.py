@@ -3,38 +3,40 @@
 infer.py — 推理与验证阶段 (Inference / Validation)
 ===================================================
 
-根据 README §5 的设计，加载训练好的 Siamese-MicroPerf 模型，
-对配对版本进行推理，输出预测加速比 Ŷ 及判断结论。
+加载训练好的 Siamese 系列模型（CNN / LSTM / Transformer），对配对版本进行推理，输出预测加速比 Ŷ 及判断结论。
 
 支持两种输入模式
 ----------------
-  1. 张量模式（默认）：直接读取 build_dataset.py 生成的 .pt 张量
-  2. CSV 模式：读取原始 PMU CSV，实时执行特征工程后推理
+    1. 张量模式（默认）：直接读取 build_dataset_*.py 生成的 .pt 张量
+    2. CSV 模式：读取原始 PMU CSV，实时执行特征工程后推理
 
 输出
 ----
-  对每个程序输出：
-    - 预测加速比 Ŷ（标量）
-    - 判断结论：Ŷ > 1.0 → v1 优于 v2；Ŷ < 1.0 → v2 优于 v1
-    - 若有真实标签 Y，同时输出误差与验证指标
+    对每个程序输出：
+        - 预测加速比 Ŷ（标量）
+        - 判断结论：Ŷ > 1.0 → v1 优于 v2；Ŷ < 1.0 → v2 优于 v1
+        - 若有真实标签 Y，同时输出误差与验证指标
 
 用法
 ----
-  # 对已有张量做推理（默认 fixed_time）
-  python3 python/infer.py --checkpoint checkpoints/best_model.pt
+    # 对已有张量做推理（默认 fixed_time）
+    python3 python/infer.py --checkpoint checkpoints/best_model.pt
 
-  # 使用固定工作量张量
-  python3 python/infer.py --checkpoint checkpoints/best_model.pt \\
-      --tensor-base train_set/tensors/fixed_work
+    # 指定模型（auto/cnn/lstm/transformer），默认为 auto（优先使用 checkpoint 中的记录）
+    python3 python/infer.py --checkpoint checkpoints/best_model.pt --model lstm
 
-  # 只推理指定版本对
-  python3 python/infer.py --checkpoint checkpoints/best_model.pt \\
-      --pairs O2-bolt_vs_O2-bolt-opt
+    # 使用固定工作量张量
+    python3 python/infer.py --checkpoint checkpoints/best_model.pt \
+            --tensor-base train_set/tensors/fixed_work
 
-  # 对两个原始 CSV 做单次推理
-  python3 python/infer.py --checkpoint checkpoints/best_model.pt \\
-      --csv-v1 path/to/v1.csv --csv-v2 path/to/v2.csv \\
-      --stats train_set/tensors/fixed_time/O2-bolt_vs_O2-bolt-opt/stats.json
+    # 只推理指定版本对
+    python3 python/infer.py --checkpoint checkpoints/best_model.pt \
+            --pairs O2-bolt_vs_O2-bolt-opt
+
+    # 对两个原始 CSV 做单次推理
+    python3 python/infer.py --checkpoint checkpoints/best_model.pt \
+            --csv-v1 path/to/v1.csv --csv-v2 path/to/v2.csv \
+            --stats train_set/tensors/fixed_time/O2-bolt_vs_O2-bolt-opt/stats.json
 """
 
 import argparse
@@ -47,23 +49,36 @@ import logging
 import numpy as np
 import torch
 
-from model import SiameseMicroPerf
+from model_factory import INFER_MODEL_CHOICES, build_model, get_model_kwargs
 
 # 复用 build_dataset 的特征提取逻辑
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from build_dataset import extract_features  # noqa: E402
+from build_dataset_fixedtime import extract_features  # noqa: E402
 
 
 # ── 工具函数 ──────────────────────────────────────────────────────────────────
 
 def load_model(checkpoint_path: Path, device: torch.device,
-               **model_kwargs) -> SiameseMicroPerf:
+               model_name: str, model_kwargs: dict):
     """加载训练好的模型。"""
-    ckpt = torch.load(checkpoint_path, map_location=device)
-    model = SiameseMicroPerf(**model_kwargs).to(device)
+    ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    checkpoint_model_name = ckpt.get("model_name")
+    checkpoint_model_kwargs = ckpt.get("model_kwargs")
+
+    if model_name == "auto":
+        model_name = checkpoint_model_name or "cnn"
+        if checkpoint_model_kwargs:
+            model_kwargs = checkpoint_model_kwargs
+    elif checkpoint_model_name and checkpoint_model_name != model_name:
+        logging.getLogger(__name__).warning(
+            "检查点记录的模型类型为 %s，但当前显式指定为 %s；将按显式参数加载",
+            checkpoint_model_name, model_name,
+        )
+
+    model = build_model(model_name, **model_kwargs).to(device)
     model.load_state_dict(ckpt["model_state_dict"])
     model.eval()
-    return model
+    return model, model_name, model_kwargs
 
 
 def judge(y_hat: float, v1_name: str = "v1", v2_name: str = "v2") -> str:
@@ -286,10 +301,25 @@ def main():
         "--stats", type=Path, default=None,
         help="归一化统计量 stats.json 路径（CSV 模式必需）")
 
-    # 模型超参（需与训练时一致）
+    # 模型超参（需与训练时一致；若 checkpoint 中有记录则 infer --model auto 会优先复用）
+    parser.add_argument(
+        "--model", "--arch", dest="model",
+        choices=INFER_MODEL_CHOICES, default="auto")
     parser.add_argument("--in-features", type=int, default=6)
     parser.add_argument("--cnn-hidden", type=int, default=64)
     parser.add_argument("--cnn-out", type=int, default=128)
+    parser.add_argument("--lstm-hidden", type=int, default=64)
+    parser.add_argument("--lstm-out", type=int, default=128)
+    parser.add_argument("--bidirectional", action="store_true", default=True)
+    parser.add_argument("--no-bidirectional", dest="bidirectional",
+                        action="store_false")
+    parser.add_argument("--d-model", type=int, default=128)
+    parser.add_argument("--nhead", type=int, default=4)
+    parser.add_argument("--num-layers", type=int, default=3)
+    parser.add_argument("--dim-feedforward", type=int, default=256)
+    parser.add_argument("--max-len", type=int, default=512)
+    parser.add_argument("--pos-encoding", choices=["learnable", "sinusoidal"],
+                        default="learnable")
     parser.add_argument("--mlp-hidden", type=int, default=64)
     parser.add_argument("--dropout", type=float, default=0.1)
 
@@ -316,16 +346,21 @@ def main():
     root_logger.addHandler(fh)
     root_logger.addHandler(sh)
 
-    # 加载模型
-    model = load_model(
-        args.checkpoint, device,
+    fallback_model_name = "cnn" if args.model == "auto" else args.model
+    fallback_model_kwargs = get_model_kwargs(
+        fallback_model_name,
         in_features=args.in_features,
-        cnn_hidden=args.cnn_hidden,
-        cnn_out=args.cnn_out,
-        mlp_hidden=args.mlp_hidden,
-        dropout=args.dropout,
+        args=args,
+    )
+    model, resolved_model_name, resolved_model_kwargs = load_model(
+        args.checkpoint,
+        device,
+        model_name=args.model,
+        model_kwargs=fallback_model_kwargs,
     )
     logging.getLogger(__name__).info("模型加载完成: %s  (设备: %s)", args.checkpoint, device)
+    logging.getLogger(__name__).info("模型类型: %s", resolved_model_name)
+    logging.getLogger(__name__).info("模型参数: %s", resolved_model_kwargs)
 
     # ── CSV 模式 ──
     if args.csv_v1 and args.csv_v2:

@@ -3,21 +3,32 @@
 train.py — Siamese-MicroPerf 训练 / 验证脚本
 =============================================
 
-加载 build_dataset.py 生成的张量，训练 Siamese 1D-CNN + Attention Pooling
-网络预测编译版本间的相对加速比。
+加载 build_dataset_*.py 生成的张量，训练或评估 Siamese 系列模型（CNN / LSTM / Transformer）。
 
 用法
 ----
-  python3 python/train.py                               # 默认参数（fixed_time）
-  python3 python/train.py --epochs 200 --lr 1e-3        # 自定义超参
-  python3 python/train.py --pairs O1-g_vs_O3-g          # 只用一组对
-  python3 python/train.py --tensor-base train_set/tensors/fixed_work  # 用固定工作量数据
-  python3 python/train.py --eval-only --checkpoint ckpt.pt  # 仅推理
-  
+    # 默认（CNN）训练
+    python3 python/train.py
+
+    # 指定模型（可选：cnn, lstm, transformer）
+    python3 python/train.py --model lstm --lstm-hidden 64 --lstm-out 128
+
+    # 自定义超参
+    python3 python/train.py --epochs 200 --lr 1e-3
+
+    # 只用一组对
+    python3 python/train.py --pairs O1-g_vs_O3-g
+
+    # 指定张量来源（固定工作量示例）
+    python3 python/train.py --tensor-base train_set/tensors/fixed_work
+
+    # 仅评估已有 checkpoint
+    python3 python/train.py --eval-only --checkpoint checkpoints/best_model.pt
+
 说明
 ----
-    默认会将训练过程中表现最好的模型保存到项目根目录下的 `checkpoints/best_model.pt`。
-    可以通过 `--checkpoint <path>` 指定要加载或保存的检查点路径以覆盖该默认行为。
+        - 使用 `--model` 或别名 `--arch` 选择主干：`cnn`（默认），`lstm`，或 `transformer`。
+        - LSTM/Transformer 有各自附加超参（参见 --help），训练脚本会把模型类型和构造参数写入 checkpoint 元信息，便于推理端自动恢复。
 """
 
 import argparse
@@ -32,7 +43,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from model import SiameseMicroPerf
+from model_factory import MODEL_CHOICES, build_model, get_model_kwargs
 
 # ── 默认常量 ──────────────────────────────────────────────────────────────────
 
@@ -41,6 +52,22 @@ DEFAULT_PAIRS = [
     "O2-bolt_vs_O2-bolt-opt",
     "O3-bolt_vs_O3-bolt-opt",
 ]
+
+
+def resolve_checkpoint_file(checkpoint: Path | None, create_dir: bool = False) -> Path | None:
+    """将目录/文件形式的 checkpoint 参数解析为具体文件路径。"""
+    if checkpoint is None:
+        return None
+
+    if checkpoint.exists() and checkpoint.is_dir():
+        return checkpoint / "best_model.pt"
+
+    if not checkpoint.exists() and checkpoint.suffix != ".pt":
+        if create_dir:
+            checkpoint.mkdir(parents=True, exist_ok=True)
+        return checkpoint / "best_model.pt"
+
+    return checkpoint
 
 
 # ── 数据加载 ──────────────────────────────────────────────────────────────────
@@ -215,9 +242,29 @@ def main():
     parser.add_argument(
         "--warmup-epochs", type=int, default=10,
         help="学习率线性预热轮数")
-    # 模型超参
+    parser.add_argument(
+        "--model", "--arch", dest="model",
+        choices=MODEL_CHOICES, default="cnn",
+        help="模型类型")
+    # CNN 超参
     parser.add_argument("--cnn-hidden", type=int, default=64)
     parser.add_argument("--cnn-out", type=int, default=128)
+    # LSTM 超参
+    parser.add_argument("--lstm-hidden", type=int, default=64)
+    parser.add_argument("--lstm-out", type=int, default=128)
+    parser.add_argument("--bidirectional", action="store_true", default=True,
+                        help="LSTM 使用双向（默认开启）")
+    parser.add_argument("--no-bidirectional", dest="bidirectional",
+                        action="store_false", help="LSTM 使用单向")
+    # Transformer 超参
+    parser.add_argument("--d-model", type=int, default=128)
+    parser.add_argument("--nhead", type=int, default=4)
+    parser.add_argument("--num-layers", type=int, default=3)
+    parser.add_argument("--dim-feedforward", type=int, default=256)
+    parser.add_argument("--max-len", type=int, default=512)
+    parser.add_argument("--pos-encoding", choices=["learnable", "sinusoidal"],
+                        default="learnable")
+    # 通用头部超参
     parser.add_argument("--mlp-hidden", type=int, default=64)
     parser.add_argument("--dropout", type=float, default=0.1)
 
@@ -260,6 +307,15 @@ def main():
         X_v1.shape[0], X_v1.shape[1], X_v1.shape[2])
 
     in_features = X_v1.shape[2]  # D
+    ckpt_file = resolve_checkpoint_file(args.checkpoint, create_dir=True)
+    checkpoint_data = None
+    if ckpt_file is not None and ckpt_file.exists():
+        checkpoint_data = torch.load(ckpt_file, map_location=device, weights_only=False)
+        checkpoint_model_name = checkpoint_data.get("model_name")
+        if checkpoint_model_name and checkpoint_model_name != args.model:
+            raise ValueError(
+                f"检查点模型类型为 {checkpoint_model_name}，但当前 --model={args.model}"
+            )
 
     # ── 划分训练/验证集 ──
     X_v1_tr, X_v2_tr, Y_tr, lv1_tr, lv2_tr, \
@@ -276,14 +332,10 @@ def main():
     val_loader = DataLoader(val_ds, batch_size=args.batch_size)
 
     # ── 模型 ──
-    model = SiameseMicroPerf(
-        in_features=in_features,
-        cnn_hidden=args.cnn_hidden,
-        cnn_out=args.cnn_out,
-        mlp_hidden=args.mlp_hidden,
-        dropout=args.dropout,
-    ).to(device)
+    model_kwargs = get_model_kwargs(args.model, in_features=in_features, args=args)
+    model = build_model(args.model, **model_kwargs).to(device)
 
+    logging.getLogger(__name__).info("模型类型: %s", args.model)
     logging.getLogger(__name__).info(
         "\n模型参数: %s", f"{sum(p.numel() for p in model.parameters()):,}")
     logging.getLogger(__name__).info("%s", model)
@@ -292,22 +344,9 @@ def main():
     criterion = nn.HuberLoss(delta=args.huber_delta)
 
     # 加载检查点：支持将 --checkpoint 指定为目录或文件
-    if args.checkpoint:
-        # 如果给出的是已存在的目录，优先在该目录下查找 best_model.pt
-        if args.checkpoint.exists() and args.checkpoint.is_dir():
-            ckpt_file = args.checkpoint / "best_model.pt"
-        else:
-            # 路径不存在时，根据后缀判定：带 .pt 当作文件，否则视为目录并创建
-            if not args.checkpoint.exists() and args.checkpoint.suffix != ".pt":
-                args.checkpoint.mkdir(parents=True, exist_ok=True)
-                ckpt_file = args.checkpoint / "best_model.pt"
-            else:
-                ckpt_file = args.checkpoint
-
-        if ckpt_file.exists():
-            ckpt = torch.load(ckpt_file, map_location=device, weights_only=True)
-            model.load_state_dict(ckpt["model_state_dict"])
-            logging.getLogger(__name__).info("加载检查点: %s", ckpt_file)
+    if checkpoint_data is not None:
+        model.load_state_dict(checkpoint_data["model_state_dict"])
+        logging.getLogger(__name__).info("加载检查点: %s", ckpt_file)
 
     # ── 评估模式 ──
     if args.eval_only:
@@ -335,18 +374,9 @@ def main():
     best_epoch = 0
     best_model_state = None
     # 决定模型保存路径：优先使用 --checkpoint（目录或文件），否则放到 project_root/checkpoints/best_model.pt
-    if args.checkpoint:
-        if args.checkpoint.exists() and args.checkpoint.is_dir():
-            save_path = args.checkpoint / "best_model.pt"
-        else:
-            if not args.checkpoint.exists() and args.checkpoint.suffix != ".pt":
-                # 路径看起来像目录且不存在，已在上面创建，使用目录下的 best_model.pt
-                save_path = args.checkpoint / "best_model.pt"
-            else:
-                # 视为文件路径
-                save_path = args.checkpoint
-            # 确保父目录存在（文件路径情况）
-            save_path.parent.mkdir(parents=True, exist_ok=True)
+    if ckpt_file is not None:
+        save_path = ckpt_file
+        save_path.parent.mkdir(parents=True, exist_ok=True)
     else:
         save_dir = args.project_root / "checkpoints"
         save_dir.mkdir(parents=True, exist_ok=True)
@@ -381,6 +411,8 @@ def main():
                 "model_state_dict": model.state_dict(),
                 "val_loss": float(val_loss),
                 "val_mae": float(val_mae),
+                "model_name": args.model,
+                "model_kwargs": model_kwargs,
             }, save_path)
             status = "← best"
         else:

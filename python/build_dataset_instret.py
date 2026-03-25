@@ -71,7 +71,7 @@ import pandas as pd
 import torch
 
 # 复用 build_dataset 中的常量和基础函数
-from build_dataset import (
+from python.build_dataset_fixedtime import (
     PMU_COUNTER_COLS,
     INST_COL,
     LBR_FEATURE_COL,

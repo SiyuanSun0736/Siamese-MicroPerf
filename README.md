@@ -1,6 +1,6 @@
 # Siamese-MicroPerf
 
-Siamese-MicroPerf 是一个面向编译优化效果预测的性能建模项目。它通过采集程序运行时的 PMU 计数器和 LBR 分支轨迹，构造时序特征，再使用 Siamese 1D-CNN + Attention Pooling 网络预测两个二进制版本之间的相对性能差异。
+Siamese-MicroPerf 是一个面向编译优化效果预测的性能建模项目。它通过采集程序运行时的 PMU 计数器和 LBR 分支轨迹，构造时序特征，再使用 Siamese 网络预测两个二进制版本之间的相对性能差异。
 
 当前仓库同时包含两部分能力：
 
@@ -66,13 +66,19 @@ Python 侧会把原始计数器转换为模型可用的时序特征：
 
 ### 3. 模型结构
 
-模型定义在 `python/model.py`，主要由三部分组成：
+模型定义在 `python/model_cnn.py`、`python/model_lstm.py`、`python/model_transformer.py`，并由 `python/model_factory.py` 统一分发。当前支持三种主干：
 
-- 共享权重的 1D CNN Backbone
+- CNN: Siamese 1D-CNN + Attention Pooling
+- LSTM: Siamese Bidirectional LSTM + Attention Pooling
+- Transformer: Siamese Transformer Encoder + Attention Pooling
+
+三者都由三部分组成：
+
+- 共享权重的 Backbone（CNN / BiLSTM / Transformer Encoder）
 - Mask-aware Attention Pooling
 - MLP 回归头
 
-两个版本分别经过共享编码器后得到向量表示，再融合 `[V_v1; V_v2; V_v1 - V_v2]` 做回归，输出相对性能倍率。
+每个版本分别经过共享编码器后得到向量表示，再融合 `[V_v1; V_v2; V_v1 - V_v2]` 做回归，输出相对性能倍率。
 
 ### 4. 训练与推理
 
@@ -81,6 +87,7 @@ Python 侧会把原始计数器转换为模型可用的时序特征：
 - 加载一组或多组版本对张量
 - 划分训练集/验证集
 - 使用 Huber Loss 训练模型
+- 通过 `--model` / `--arch` 选择 CNN、LSTM 或 Transformer
 - 自动保存最佳检查点到 `checkpoints/best_model.pt`
 
 推理脚本 `python/infer.py` 支持两种模式：
@@ -176,7 +183,7 @@ make
 如果 `train_set/tensors/` 下已经存在构建好的张量，可以直接训练：
 
 ```bash
-python3 python/train.py
+python3 python/train.py --model cnn
 ```
 
 训练输出：
@@ -191,6 +198,8 @@ python3 python/infer.py --checkpoint checkpoints/best_model.pt
 ```
 
 推理输出会写到控制台和 `log/infer_*.log`。
+
+默认情况下，推理脚本会根据 checkpoint 中记录的元信息自动识别模型类型；也可以通过 `--model` / `--arch` 显式指定。
 
 ## 完整数据流水线
 
@@ -247,7 +256,7 @@ sudo ./generate_train_set.sh
 默认机制是固定时间窗口，标签定义为运行次数之比：
 
 ```bash
-python3 python/build_dataset.py
+python3 python/build_dataset_fixedtime.py
 ```
 
 输出目录默认是：
@@ -322,37 +331,51 @@ train_set/tensors/inst_retired/
 #### 使用默认固定时间数据训练
 
 ```bash
-python3 python/train.py
+python3 python/train.py --model cnn
+```
+
+#### 使用 LSTM 训练
+
+```bash
+python3 python/train.py --model lstm
+```
+
+#### 使用 Transformer 训练
+
+```bash
+python3 python/train.py --model transformer
 ```
 
 #### 使用固定工作量数据训练
 
 ```bash
-python3 python/train.py --tensor-base train_set/tensors/fixed_work
+python3 python/train.py --model cnn --tensor-base train_set/tensors/fixed_work
 ```
 
 #### 使用退役指令总数标签数据训练
 
 ```bash
-python3 python/train.py --tensor-base train_set/tensors/inst_retired
+python3 python/train.py --model cnn --tensor-base train_set/tensors/inst_retired
 ```
 
 #### 只训练指定版本对
 
 ```bash
-python3 python/train.py --pairs O1-g_vs_O3-g
+python3 python/train.py --model cnn --pairs O1-g_vs_O3-g
 ```
 
 #### 只评估已有模型
 
 ```bash
 python3 python/train.py \
+  --model cnn \
   --eval-only \
   --checkpoint checkpoints/best_model.pt
 ```
 
 常用训练参数：
 
+- `--model` / `--arch`，`cnn`、`lstm` 或 `transformer`
 - `--epochs`，默认 150
 - `--batch-size`，默认 32
 - `--lr`，默认 `1e-3`
@@ -360,12 +383,35 @@ python3 python/train.py \
 - `--patience`，默认 30
 - `--noise-std`，默认 0.05
 
+LSTM 常用附加参数：
+
+- `--lstm-hidden`，默认 64
+- `--lstm-out`，默认 128
+- `--num-layers`，默认 2（LSTM 层数，与 Transformer 共用参数名）
+- `--bidirectional` / `--no-bidirectional`，默认双向
+
+Transformer 常用附加参数：
+
+- `--d-model`，默认 128
+- `--nhead`，默认 4
+- `--num-layers`，默认 3
+- `--dim-feedforward`，默认 256
+- `--pos-encoding`，`learnable` 或 `sinusoidal`
+
 ### 第五步：推理与验证
 
 #### 对全部默认版本对推理
 
 ```bash
 python3 python/infer.py --checkpoint checkpoints/best_model.pt
+```
+
+#### 显式指定 Transformer checkpoint 推理
+
+```bash
+python3 python/infer.py \
+  --checkpoint checkpoints/best_model.pt \
+  --model transformer
 ```
 
 #### 对固定工作量张量推理
@@ -401,6 +447,13 @@ python3 python/infer.py \
   --csv-v2 path/to/v2.csv \
   --stats train_set/tensors/fixed_time/O2-bolt_vs_O2-bolt-opt/stats.json
 ```
+
+推理时常用模型参数：
+
+- `--model auto`：从 checkpoint 自动识别模型类型
+- `--model cnn`
+- `--model lstm`
+- `--model transformer`
 
 ## `pmu_monitor` 用法
 
@@ -458,7 +511,6 @@ sudo ./pmu_monitor 12345 -E
 
 - [docs](docs/)
 
-
 ## 注意事项
 
 - 该项目强依赖 Linux 性能计数器环境，不能简单移植到无 `perf_event_open` 的平台。
@@ -483,8 +535,8 @@ cmake -DCMAKE_C_COMPILER=/usr/bin/clang \
 make -j8
 cd ../..
 sudo train_set/generate_train_set.sh
-python3 python/build_dataset.py
-python3 python/train.py
+python3 python/build_dataset_fixedtime.py
+python3 python/train.py --model cnn
 python3 python/infer.py --checkpoint checkpoints/best_model.pt
 ```
 
