@@ -194,6 +194,14 @@ def print_results(Y_hat, Y, programs, v1_name, v2_name,
         v1_better_true = (true > 1.0).sum()
         logger.info("  预测 %s 更优: %d/%d  (真实: %d/%d)", v1_name, v1_better_pred, N, v1_better_true, N)
 
+        # 方向准确率（排除 ±5% 区间的样本）——聚焦有显著真实差异的样本
+        mask = np.abs(true - 1.0) > 0.05
+        if mask.sum() > 0:
+            correct_filt = (((pred[mask] >= 1.0) & (true[mask] >= 1.0)) |
+                            ((pred[mask] <  1.0) & (true[mask] <  1.0))).sum()
+            acc_filt = correct_filt / mask.sum() * 100.0
+            logger.info("  方向准确率（排除 ±5%%）= %d/%d (%.1f%%)", int(correct_filt), int(mask.sum()), acc_filt)
+
 
 # ── CSV 模式推理 ──────────────────────────────────────────────────────────────
 
