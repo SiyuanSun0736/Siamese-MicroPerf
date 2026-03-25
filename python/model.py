@@ -4,10 +4,29 @@ model.py — Siamese 网络主干 (1D-CNN + Attention Pooling + MLP)
 ==============================================================
 
 按照 README §3–§4 的设计：
-  - 共享权重的多层 1D-CNN（带残差连接）提取局部时序特征 H ∈ R^{T×F}
-  - Masked Attention Pooling 将变长时序压缩为定长向量 V ∈ R^F
-  - MLP 对多种融合特征 [ΔV; V_v1; V_v2] 做回归，输出连续加速比 Ŷ
-  - 使用 Huber Loss 作为鲁棒损失函数
+    - 共享权重的多层 1D-CNN（带残差连接）提取局部时序特征 H ∈ R^{T×F}
+    - Masked Attention Pooling 将变长时序压缩为定长向量 V ∈ R^F
+    - MLP 对多种融合特征 [ΔV; V_v1; V_v2] 做回归，输出连续加速比 Ŷ
+    - 使用 Huber Loss 作为鲁棒损失函数
+
+处理阶段（前向概览）
+
+1) 特征编码（共享双塔）
+   - 输入 x_v (batch, T, D) → permute → (batch, D, T)
+   - Conv1d → BatchNorm → ReLU → Dropout
+   - 残差块：保存 residual；Conv1d → BN → ReLU → Dropout；相加
+   - 投影残差：res_proj(1×1) 对齐通道；Conv1d → BN → ReLU → Dropout；相加
+   - permute 回 (batch, T, F)
+   - Attention Pooling：linear 打分 → mask 为填充置 -inf → softmax → 加权求和 → v (batch, F)
+
+2) 特征融合
+   - delta = v1 - v2
+   - fused = [v1, v2, delta] → (batch, 3*F)
+
+3) 回归决策（MLP Head）
+   - Linear → ReLU → Dropout
+   - Linear → ReLU → Dropout
+   - Linear → 输出标量 Ŷ
 """
 
 import argparse
@@ -24,6 +43,21 @@ logger = logging.getLogger(__name__)
 
 class CNNBackbone(nn.Module):
     """多层 1D-CNN 局部特征提取器，带残差连接。
+
+    1. 局部特征提取层 (CNNBackbone)
+
+        Block 1 (基础变换):
+            - Conv1d: 3×1 卷积，提取局部时序模式。
+            - BatchNorm1d: 标准化，加速收敛。
+            - ReLU & Dropout: 非线性激活与正则化。
+
+        Block 2 (等维残差块):
+            - 包含一个完整的卷积流水线。
+            - 变量关系：x_out = f(x_in) + x_in。输入与输出通道数相同，直接相加。
+
+        Block 3 (投影残差块):
+            - 使用 1×1 卷积（Pointwise Conv）将通道数从 hidden 映射到 out（`res_proj`）。
+            - 变量关系：x_out = f(x_in) + Conv1x1(x_in)。
 
     输入:  (batch, T, D)   — T 时间步, D 原始特征维度
     输出:  (batch, T, F)   — F 为最终卷积通道数
@@ -68,6 +102,13 @@ class CNNBackbone(nn.Module):
 
 class AttentionPooling(nn.Module):
     """掩码感知的注意力降维：将 (batch, T, F) 压缩为 (batch, F)。
+    2. 时序压缩层 (AttentionPooling)
+
+        - 线性映射层：nn.Linear(feature_dim, 1)，计算每个时间步的“重要性”得分。
+        - 掩码机制 (Masked Softmax)：
+            A = Softmax(H W_att + mask)，其中 mask 在填充位置施加 -inf，
+            保证填充位置的权重为 0（不参与加权求和）。
+        - 加权求和层：V = Σ_t A_t · H_t，将变长序列聚合为定长向量 (batch, F)。
 
     对填充位置施加 -inf 掩码，使其 softmax 权重为 0，
     防止零填充区的伪特征污染注意力分配。
@@ -124,6 +165,12 @@ class SiameseMicroPerf(nn.Module):
         # MLP 回归头：输入 [V_v1; V_v2; ΔV] — 3×F 维度
         # 保留绝对特征 + 差异特征，信息更丰富
         mlp_input_dim = cnn_out * 3
+        # 4. 回归决策层 (MLP Head)
+        #    - 全连接序列：
+        #        Linear(3*F, mlp_hidden) → ReLU → Dropout
+        #        Linear(mlp_hidden, mlp_hidden/2) → ReLU → Dropout
+        #        输出层：Linear(mlp_hidden/2, 1)
+        #    - 注意：输出层无激活函数，直接回归连续加速比。
         self.mlp = nn.Sequential(
             nn.Linear(mlp_input_dim, mlp_hidden),
             nn.ReLU(),
@@ -131,7 +178,7 @@ class SiameseMicroPerf(nn.Module):
             nn.Linear(mlp_hidden, mlp_hidden // 2),
             nn.ReLU(),
             nn.Dropout(dropout),
-            nn.Linear(mlp_hidden // 2, 1),  # 无限制性激活函数
+            nn.Linear(mlp_hidden // 2, 1),
         )
 
     def encode(self, x: torch.Tensor,

@@ -1,0 +1,28 @@
+sequenceDiagram
+    participant Caller as Caller
+    participant SMP as SiameseMicroPerf\\n(forward L179)
+    participant Encode as `encode`\\n(L172)
+    participant Backbone as CNNBackbone\\n(forward L71)
+    participant Pool as AttentionPooling\\n(forward L112)
+    participant MLP as `self.mlp`\\n(def L162 / call L197)
+
+    Caller->>SMP: forward(x_v1, x_v2)  [python/model.py#L179]
+    SMP->>Encode: encode(x_v1, len_v1)  [python/model.py#L172]
+    Encode->>Backbone: backbone(x_v1) -> CNNBackbone.forward  [python/model.py#L71]
+    Backbone-->>Encode: h (batch, T, F)
+    Encode->>Pool: pool(h, len_v1) -> AttentionPooling.forward  [python/model.py#L112]
+    Pool-->>Encode: v1 (batch, F)
+    Encode-->>SMP: return v1
+
+    SMP->>Encode: encode(x_v2, len_v2)  [python/model.py#L172]
+    Encode->>Backbone: backbone(x_v2) -> CNNBackbone.forward  [python/model.py#L71]
+    Backbone-->>Encode: h2
+    Encode->>Pool: pool(h2, len_v2) -> AttentionPooling.forward  [python/model.py#L112]
+    Pool-->>Encode: v2
+    Encode-->>SMP: return v2
+
+    SMP->>SMP: delta = v1 - v2  [python/model.py#L193]
+    SMP->>SMP: fused = torch.cat([v1,v2,delta])  [python/model.py#L194]
+    SMP->>MLP: self.mlp(fused) -> forward through Sequential  [python/model.py#L162]
+    MLP-->>SMP: y_hat  [python/model.py#L197]
+    SMP-->>Caller: return y_hat
