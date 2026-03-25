@@ -244,12 +244,21 @@ def main():
     log_dir = args.project_root / "log"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / f"infer_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-    logging.basicConfig(
-        level=logging.INFO,
-        filename=str(log_file),
-        filemode='w',
-        format='%(asctime)s %(levelname)s: %(message)s',
-    )
+    # 配置根日志：同时写入文件和输出到控制台
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    fmt = logging.Formatter('%(asctime)s %(levelname)s: %(message)s')
+
+    fh = logging.FileHandler(str(log_file), mode='w')
+    fh.setFormatter(fmt)
+    sh = logging.StreamHandler(sys.stdout)
+    sh.setFormatter(fmt)
+
+    # 清理已有处理器（防止重复添加）
+    if root_logger.handlers:
+        root_logger.handlers = []
+    root_logger.addHandler(fh)
+    root_logger.addHandler(sh)
 
     # 加载模型
     model = load_model(

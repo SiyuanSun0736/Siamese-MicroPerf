@@ -45,7 +45,9 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from datetime import datetime
 
+import logging
 import numpy as np
 import pandas as pd
 import torch
@@ -105,14 +107,14 @@ def extract_features(csv_path: Path, seq_len: int) -> np.ndarray | None:
     try:
         df = pd.read_csv(csv_path)
     except Exception as e:
-        print(f"  [WARN] 无法读取 {csv_path}: {e}", file=sys.stderr)
+        logging.getLogger(__name__).warning("无法读取 %s: %s", csv_path, e)
         return None
 
     # 检查必要列
     required = [INST_COL, LBR_FEATURE_COL] + list(PMU_COUNTER_COLS.keys())
     missing = [c for c in required if c not in df.columns]
     if missing:
-        print(f"  [WARN] {csv_path} 缺少列: {missing}", file=sys.stderr)
+        logging.getLogger(__name__).warning("%s 缺少列: %s", csv_path, missing)
         return None
 
     # 取指令数作为 MPKI 分母，避免除零
@@ -165,10 +167,10 @@ def build_pair_dataset(
     m2_path = manifest_dir / f"manifest_{v2_name}.jsonl"
 
     if not m1_path.exists():
-        print(f"  [ERROR] manifest 不存在: {m1_path}", file=sys.stderr)
+        logging.getLogger(__name__).error("manifest 不存在: %s", m1_path)
         return [], [], [], []
     if not m2_path.exists():
-        print(f"  [ERROR] manifest 不存在: {m2_path}", file=sys.stderr)
+        logging.getLogger(__name__).error("manifest 不存在: %s", m2_path)
         return [], [], [], []
 
     m1 = load_manifest(m1_path)
@@ -176,7 +178,7 @@ def build_pair_dataset(
 
     common_programs = sorted(set(m1.keys()) & set(m2.keys()))
     if not common_programs:
-        print(f"  [WARN] {v1_name} 与 {v2_name} 无公共程序", file=sys.stderr)
+        logging.getLogger(__name__).warning("%s 与 %s 无公共程序", v1_name, v2_name)
         return [], [], [], []
 
     X_v1_list, X_v2_list, Y_list, programs = [], [], [], []
@@ -188,8 +190,8 @@ def build_pair_dataset(
         csv2 = project_root / entry2["csv"]
 
         if not csv1.exists() or not csv2.exists():
-            print(f"  [SKIP] {prog}: CSV 文件缺失 "
-                  f"(v1={csv1.exists()}, v2={csv2.exists()})")
+            logging.getLogger(__name__).warning(
+                "%s: CSV 文件缺失 (v1=%s, v2=%s)", prog, csv1.exists(), csv2.exists())
             continue
 
         feat1 = extract_features(csv1, seq_len)
@@ -202,7 +204,7 @@ def build_pair_dataset(
         n1 = entry1.get("run_count", 0)
         n2 = entry2.get("run_count", 0)
         if n2 == 0:
-            print(f"  [SKIP] {prog}: v2 run_count=0，无法计算标签")
+            logging.getLogger(__name__).warning("%s: v2 run_count=0，无法计算标签", prog)
             continue
 
         Y = float(n1) / float(n2)
@@ -240,6 +242,22 @@ def main():
     project_root = args.project_root
     output_base = args.output_dir or (project_root / "train_set" / "tensors")
 
+    # 配置日志：同时写入文件和输出到控制台
+    log_dir = project_root / "log"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / f"build_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    fmt = logging.Formatter('%(asctime)s %(levelname)s: %(message)s')
+    fh = logging.FileHandler(str(log_file), mode='w')
+    fh.setFormatter(fmt)
+    sh = logging.StreamHandler(sys.stdout)
+    sh.setFormatter(fmt)
+    if root_logger.handlers:
+        root_logger.handlers = []
+    root_logger.addHandler(fh)
+    root_logger.addHandler(sh)
+
     # 解析版本对
     if args.pairs:
         pairs = []
@@ -255,28 +273,28 @@ def main():
     feature_names = list(PMU_COUNTER_COLS.values()) + [LBR_FEATURE_COL]
     D = len(feature_names)
 
-    print(f"项目根目录: {project_root}")
-    print(f"序列长度 T: {args.seq_len}")
-    print(f"特征维度 D: {D}  {feature_names}")
-    print(f"Z-score:    {'开启' if not args.no_zscore else '关闭'}")
-    print(f"版本对:     {pairs}")
-    print()
+    logging.getLogger(__name__).info("项目根目录: %s", project_root)
+    logging.getLogger(__name__).info("序列长度 T: %d", args.seq_len)
+    logging.getLogger(__name__).info("特征维度 D: %d  %s", D, feature_names)
+    logging.getLogger(__name__).info("Z-score:    %s", '开启' if not args.no_zscore else '关闭')
+    logging.getLogger(__name__).info("版本对:     %s", pairs)
+    logging.getLogger(__name__).info("")
 
     for v1_name, v2_name in pairs:
         pair_name = f"{v1_name}_vs_{v2_name}"
-        print(f"{'='*60}")
-        print(f"构建 Pair: {v1_name} vs {v2_name}")
-        print(f"{'='*60}")
+        logging.getLogger(__name__).info("%s", '=' * 60)
+        logging.getLogger(__name__).info("构建 Pair: %s vs %s", v1_name, v2_name)
+        logging.getLogger(__name__).info("%s", '=' * 60)
 
         X_v1_list, X_v2_list, Y_list, programs = build_pair_dataset(
             v1_name, v2_name, project_root, args.seq_len)
 
         if not programs:
-            print(f"  [WARN] 无有效样本，跳过此对\n")
+            logging.getLogger(__name__).warning("无有效样本，跳过此对")
             continue
 
         N = len(programs)
-        print(f"  有效样本数: {N}")
+        logging.getLogger(__name__).info("  有效样本数: %d", N)
 
         # 堆叠为 (N, T, D)
         X_v1 = np.stack(X_v1_list, axis=0)  # (N, T, D)
@@ -328,14 +346,15 @@ def main():
         with open(out_dir / "stats.json", "w") as f:
             json.dump(stats, f, indent=2)
 
-        print(f"  X_v1: {X_v1_tensor.shape}  X_v2: {X_v2_tensor.shape}  "
-              f"Y: {Y_tensor.shape}")
-        print(f"  Y 统计: min={Y.min():.4f}  max={Y.max():.4f}  "
-              f"mean={Y.mean():.4f}  std={Y.std():.4f}")
-        print(f"  输出: {out_dir}")
-        print()
+        logging.getLogger(__name__).info(
+            "  X_v1: %s  X_v2: %s  Y: %s", X_v1_tensor.shape, X_v2_tensor.shape, Y_tensor.shape)
+        logging.getLogger(__name__).info(
+            "  Y 统计: min=%.4f  max=%.4f  mean=%.4f  std=%.4f",
+            Y.min(), Y.max(), Y.mean(), Y.std())
+        logging.getLogger(__name__).info("  输出: %s", out_dir)
+        logging.getLogger(__name__).info("")
 
-    print("全部完成。")
+    logging.getLogger(__name__).info("全部完成。")
 
 
 if __name__ == "__main__":

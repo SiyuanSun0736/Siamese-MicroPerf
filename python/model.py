@@ -10,7 +10,11 @@ model.py — Siamese 网络主干 (1D-CNN + Attention Pooling + MLP)
   - 使用 Huber Loss 作为鲁棒损失函数
 """
 
+import argparse
 import logging
+from pathlib import Path
+from datetime import datetime
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -120,3 +124,38 @@ class SiameseMicroPerf(nn.Module):
         # MLP 回归头输出标量
         y_hat = self.mlp(delta).squeeze(-1)  # (batch,)
         return y_hat
+
+
+def _configure_logging_for_script(project_root: Path):
+    """配置根日志：同时写入文件和控制台（供独立运行模块时使用）。"""
+    log_dir = project_root / "log"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / f"model_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    fmt = logging.Formatter('%(asctime)s %(levelname)s: %(message)s')
+    fh = logging.FileHandler(str(log_file), mode='w')
+    fh.setFormatter(fmt)
+    sh = logging.StreamHandler()
+    sh.setFormatter(fmt)
+    if root_logger.handlers:
+        root_logger.handlers = []
+    root_logger.addHandler(fh)
+    root_logger.addHandler(sh)
+
+
+def _main():
+    parser = argparse.ArgumentParser(description="模型摘要与日志测试")
+    parser.add_argument("--project-root", type=Path, default=Path(__file__).resolve().parent.parent)
+    args = parser.parse_args()
+
+    _configure_logging_for_script(args.project_root)
+
+    m = SiameseMicroPerf()
+    logging.getLogger(__name__).info("模型参数: %s", f"{sum(p.numel() for p in m.parameters()):,}")
+    logging.getLogger(__name__).info("%s", m)
+
+
+if __name__ == "__main__":
+    _main()
