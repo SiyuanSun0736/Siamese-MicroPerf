@@ -37,7 +37,9 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from datetime import datetime
 
+import logging
 import numpy as np
 import torch
 
@@ -107,17 +109,18 @@ def print_results(Y_hat, Y, programs, v1_name, v2_name, pair_label: str):
     """打印推理结果表格。"""
     N = Y_hat.shape[0]
     has_label = Y is not None
+    logger = logging.getLogger(__name__)
 
-    print(f"\n{'='*72}")
-    print(f"版本对: {pair_label}  ({v1_name} vs {v2_name})  共 {N} 个程序")
-    print(f"{'='*72}")
+    logger.info("%s", "=" * 72)
+    logger.info("版本对: %s  (%s vs %s)  共 %d 个程序", pair_label, v1_name, v2_name, N)
+    logger.info("%s", "=" * 72)
 
     header = f"  {'#':>4}  {'程序':>30}  {'预测 Ŷ':>8}"
     if has_label:
         header += f"  {'真实 Y':>8}  {'误差':>8}"
     header += f"  {'判断'}"
-    print(header)
-    print(f"  {'-'*len(header)}")
+    logger.info(header)
+    logger.info("  %s", '-' * len(header))
 
     all_pred, all_true = [], []
     correct_direction = 0
@@ -134,11 +137,10 @@ def print_results(Y_hat, Y, programs, v1_name, v2_name, pair_label: str):
             line += f"  {y_true:>8.4f}  {err:>+8.4f}"
             all_pred.append(y_hat)
             all_true.append(y_true)
-            # 方向一致性：两者同侧于 1.0
             if (y_hat >= 1.0 and y_true >= 1.0) or (y_hat < 1.0 and y_true < 1.0):
                 correct_direction += 1
         line += f"  {verdict}"
-        print(line)
+        logger.info(line)
 
     # 汇总统计
     if has_label and len(all_pred) > 0:
@@ -148,17 +150,15 @@ def print_results(Y_hat, Y, programs, v1_name, v2_name, pair_label: str):
         mse = ((pred - true) ** 2).mean()
         direction_acc = correct_direction / N * 100
 
-        print(f"\n  ── 验证指标 ──")
-        print(f"  MAE  = {mae:.4f}")
-        print(f"  MSE  = {mse:.4f}")
-        print(f"  RMSE = {np.sqrt(mse):.4f}")
-        print(f"  方向准确率 = {correct_direction}/{N} ({direction_acc:.1f}%)")
+        logger.info("\n  ── 验证指标 ──")
+        logger.info("  MAE  = %.4f", mae)
+        logger.info("  MSE  = %.4f", mse)
+        logger.info("  RMSE = %.4f", np.sqrt(mse))
+        logger.info("  方向准确率 = %d/%d (%.1f%%)", correct_direction, N, direction_acc)
 
-        # Ŷ > 1 意味着 v1 快；统计预测 v1 优于 v2 的比例
         v1_better_pred = (pred > 1.0).sum()
         v1_better_true = (true > 1.0).sum()
-        print(f"  预测 {v1_name} 更优: {v1_better_pred}/{N}  "
-              f"(真实: {v1_better_true}/{N})")
+        logger.info("  预测 %s 更优: %d/%d  (真实: %d/%d)", v1_name, v1_better_pred, N, v1_better_true, N)
 
 
 # ── CSV 模式推理 ──────────────────────────────────────────────────────────────
@@ -177,7 +177,7 @@ def infer_from_csv(model, csv_v1: Path, csv_v2: Path,
     feat1 = extract_features(csv_v1, seq_len)
     feat2 = extract_features(csv_v2, seq_len)
     if feat1 is None or feat2 is None:
-        print("[ERROR] 特征提取失败", file=sys.stderr)
+        logging.error("特征提取失败")
         sys.exit(1)
 
     # Z-score 归一化（复用训练集统计量）
@@ -191,13 +191,13 @@ def infer_from_csv(model, csv_v1: Path, csv_v2: Path,
     y_hat = model(x1, x2).item()
     verdict = judge(y_hat, v1_name, v2_name)
 
-    print(f"\n{'='*60}")
-    print(f"单次推理结果")
-    print(f"{'='*60}")
-    print(f"  v1 CSV:  {csv_v1}")
-    print(f"  v2 CSV:  {csv_v2}")
-    print(f"  预测 Ŷ:  {y_hat:.4f}")
-    print(f"  判断:    {verdict}")
+    logging.info("%s", "=" * 60)
+    logging.info("单次推理结果")
+    logging.info("%s", "=" * 60)
+    logging.info("  v1 CSV:  %s", csv_v1)
+    logging.info("  v2 CSV:  %s", csv_v2)
+    logging.info("  预测 Ŷ:  %.4f", y_hat)
+    logging.info("  判断:    %s", verdict)
     return y_hat
 
 
@@ -240,6 +240,17 @@ def main():
     args = parser.parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    # 配置日志：写入 project_root/log/infer_YYYYmmdd_HHMMSS.log
+    log_dir = args.project_root / "log"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / f"infer_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    logging.basicConfig(
+        level=logging.INFO,
+        filename=str(log_file),
+        filemode='w',
+        format='%(asctime)s %(levelname)s: %(message)s',
+    )
+
     # 加载模型
     model = load_model(
         args.checkpoint, device,
@@ -249,12 +260,12 @@ def main():
         mlp_hidden=args.mlp_hidden,
         dropout=args.dropout,
     )
-    print(f"模型加载完成: {args.checkpoint}  (设备: {device})")
+    logging.getLogger(__name__).info("模型加载完成: %s  (设备: %s)", args.checkpoint, device)
 
     # ── CSV 模式 ──
     if args.csv_v1 and args.csv_v2:
         if not args.stats:
-            print("[ERROR] CSV 模式需要 --stats 参数", file=sys.stderr)
+            logging.error("CSV 模式需要 --stats 参数")
             sys.exit(1)
         infer_from_csv(model, args.csv_v1, args.csv_v2, args.stats, device)
         return
@@ -270,13 +281,13 @@ def main():
     for pair in pair_names:
         d = tensor_base / pair
         if not d.exists():
-            print(f"[WARN] 跳过不存在的目录: {d}", file=sys.stderr)
+            logging.getLogger(__name__).warning("跳过不存在的目录: %s", d)
             continue
         Y_hat, Y, programs, v1_name, v2_name = \
             infer_from_tensors(model, d, device)
         print_results(Y_hat, Y, programs, v1_name, v2_name, pair)
 
-    print()
+    logging.getLogger(__name__).info("")
 
 
 if __name__ == "__main__":

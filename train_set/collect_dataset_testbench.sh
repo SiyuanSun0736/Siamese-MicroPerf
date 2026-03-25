@@ -67,7 +67,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-VARIANT="${VARIANT:-O2-bolt}"
+VARIANT="${VARIANT:-O1-g}"
 BIN_DIR="${BIN_DIR:-}"       # 依赖 VARIANT，在 getopts 后填充
 TEST_DIR="${TEST_DIR:-}"     # 依赖 VARIANT，在 getopts 后填充
 DATA_DIR="${DATA_DIR:-}"     # 依赖 VARIANT，在 getopts 后填充
@@ -89,7 +89,7 @@ usage() {
     echo "用法: $0 [-v VARIANT] [-b BIN_DIR] [-t TEST_DIR] [-d DATA_DIR]"
     echo "         [-w PMU_WINDOW] [-i INTERVAL_MS] [-c] [-r] [-n]"
     echo "选项:"
-    echo "  -v VARIANT      变体名称（默认 O2-bolt）"
+    echo "  -v VARIANT      变体名称（默认 O1-g）"
     echo "  -b BIN_DIR      可执行文件目录"
     echo "  -t TEST_DIR     测试规格目录"
     echo "  -d DATA_DIR     PMU CSV 输出目录"

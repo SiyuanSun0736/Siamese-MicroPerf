@@ -10,9 +10,12 @@ model.py — Siamese 网络主干 (1D-CNN + Attention Pooling + MLP)
   - 使用 Huber Loss 作为鲁棒损失函数
 """
 
+import logging
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+logger = logging.getLogger(__name__)
 
 
 class CNNBackbone(nn.Module):
