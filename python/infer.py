@@ -78,6 +78,19 @@ def judge(y_hat: float, v1_name: str = "v1", v2_name: str = "v2") -> str:
         return f"{v1_name} ≈ {v2_name}（差异在 ±5% 内）"
 
 
+def resolve_label_mode(stats: dict | None) -> tuple[str, str]:
+    """从 stats.json 提取标签模式与语义说明。"""
+    if not stats:
+        return "fixed_time", "Y = N_v1 / N_v2 (throughput ratio)"
+
+    mechanism = stats.get("mechanism", "fixed_time")
+    if mechanism == "fixed_workload":
+        default_semantics = "Y = T_v2 / T_v1 (time ratio under equal work)"
+    else:
+        default_semantics = "Y = N_v1 / N_v2 (throughput ratio in a fixed window)"
+    return mechanism, stats.get("label_semantics", default_semantics)
+
+
 # ── 张量模式推理 ──────────────────────────────────────────────────────────────
 
 @torch.no_grad()
@@ -110,17 +123,20 @@ def infer_from_tensors(model, tensor_dir: Path, device: torch.device):
     if stats_path.exists():
         stats = json.loads(stats_path.read_text())
         v1_name, v2_name = stats.get("v1", "v1"), stats.get("v2", "v2")
+        mechanism, label_semantics = resolve_label_mode(stats)
     else:
         v1_name, v2_name = "v1", "v2"
+        mechanism, label_semantics = resolve_label_mode(None)
 
     # 批量前向
     Y_hat = model(X_v1, X_v2, len_v1, len_v2).cpu()
     N = Y_hat.shape[0]
 
-    return Y_hat, Y, programs, v1_name, v2_name
+    return Y_hat, Y, programs, v1_name, v2_name, mechanism, label_semantics
 
 
-def print_results(Y_hat, Y, programs, v1_name, v2_name, pair_label: str):
+def print_results(Y_hat, Y, programs, v1_name, v2_name,
+                  mechanism: str, label_semantics: str, pair_label: str):
     """打印推理结果表格。"""
     N = Y_hat.shape[0]
     has_label = Y is not None
@@ -128,6 +144,9 @@ def print_results(Y_hat, Y, programs, v1_name, v2_name, pair_label: str):
 
     logger.info("%s", "=" * 72)
     logger.info("版本对: %s  (%s vs %s)  共 %d 个程序", pair_label, v1_name, v2_name, N)
+    logger.info("标签模式: %s", mechanism)
+    logger.info("标签定义: %s", label_semantics)
+    logger.info("判定方向: Y > 1 视为 %s 更快，Y < 1 视为 %s 更快", v1_name, v2_name)
     logger.info("%s", "=" * 72)
 
     header = f"  {'#':>4}  {'程序':>30}  {'预测 Ŷ':>8}"
@@ -183,11 +202,15 @@ def infer_from_csv(model, csv_v1: Path, csv_v2: Path,
                    stats_path: Path, device: torch.device):
     """对两个原始 PMU CSV 执行实时特征工程并推理。"""
     stats = json.loads(stats_path.read_text())
-    seq_len = stats["seq_len"]
+    seq_len = stats.get("seq_len", stats.get("max_seq_len"))
+    if seq_len is None:
+        logging.error("stats.json 缺少 seq_len/max_seq_len，无法执行 CSV 模式推理")
+        sys.exit(1)
     mu = np.array(stats["mu"], dtype=np.float32)
     sigma = np.array(stats["sigma"], dtype=np.float32)
     v1_name = stats.get("v1", "v1")
     v2_name = stats.get("v2", "v2")
+    mechanism, label_semantics = resolve_label_mode(stats)
 
     result1 = extract_features(csv_v1, seq_len)
     result2 = extract_features(csv_v2, seq_len)
@@ -214,6 +237,8 @@ def infer_from_csv(model, csv_v1: Path, csv_v2: Path,
     logging.info("%s", "=" * 60)
     logging.info("单次推理结果")
     logging.info("%s", "=" * 60)
+    logging.info("  标签模式: %s", mechanism)
+    logging.info("  标签定义: %s", label_semantics)
     logging.info("  v1 CSV:  %s", csv_v1)
     logging.info("  v2 CSV:  %s", csv_v2)
     logging.info("  预测 Ŷ:  %.4f", y_hat)
@@ -315,9 +340,10 @@ def main():
         if not d.exists():
             logging.getLogger(__name__).warning("跳过不存在的目录: %s", d)
             continue
-        Y_hat, Y, programs, v1_name, v2_name = \
+        Y_hat, Y, programs, v1_name, v2_name, mechanism, label_semantics = \
             infer_from_tensors(model, d, device)
-        print_results(Y_hat, Y, programs, v1_name, v2_name, pair)
+        print_results(Y_hat, Y, programs, v1_name, v2_name,
+                      mechanism, label_semantics, pair)
 
     logging.getLogger(__name__).info("")
 

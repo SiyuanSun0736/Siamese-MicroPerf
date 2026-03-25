@@ -291,11 +291,23 @@ def main():
     # Huber Loss (§4)
     criterion = nn.HuberLoss(delta=args.huber_delta)
 
-    # 加载检查点
-    if args.checkpoint and args.checkpoint.exists():
-        ckpt = torch.load(args.checkpoint, map_location=device, weights_only=True)
-        model.load_state_dict(ckpt["model_state_dict"])
-        logging.getLogger(__name__).info("加载检查点: %s", args.checkpoint)
+    # 加载检查点：支持将 --checkpoint 指定为目录或文件
+    if args.checkpoint:
+        # 如果给出的是已存在的目录，优先在该目录下查找 best_model.pt
+        if args.checkpoint.exists() and args.checkpoint.is_dir():
+            ckpt_file = args.checkpoint / "best_model.pt"
+        else:
+            # 路径不存在时，根据后缀判定：带 .pt 当作文件，否则视为目录并创建
+            if not args.checkpoint.exists() and args.checkpoint.suffix != ".pt":
+                args.checkpoint.mkdir(parents=True, exist_ok=True)
+                ckpt_file = args.checkpoint / "best_model.pt"
+            else:
+                ckpt_file = args.checkpoint
+
+        if ckpt_file.exists():
+            ckpt = torch.load(ckpt_file, map_location=device, weights_only=True)
+            model.load_state_dict(ckpt["model_state_dict"])
+            logging.getLogger(__name__).info("加载检查点: %s", ckpt_file)
 
     # ── 评估模式 ──
     if args.eval_only:
@@ -322,9 +334,19 @@ def main():
     patience_counter = 0
     best_epoch = 0
     best_model_state = None
-    # 决定模型保存路径：优先使用 --checkpoint，否则放到 project_root/checkpoints/best_model.pt
+    # 决定模型保存路径：优先使用 --checkpoint（目录或文件），否则放到 project_root/checkpoints/best_model.pt
     if args.checkpoint:
-        save_path = args.checkpoint
+        if args.checkpoint.exists() and args.checkpoint.is_dir():
+            save_path = args.checkpoint / "best_model.pt"
+        else:
+            if not args.checkpoint.exists() and args.checkpoint.suffix != ".pt":
+                # 路径看起来像目录且不存在，已在上面创建，使用目录下的 best_model.pt
+                save_path = args.checkpoint / "best_model.pt"
+            else:
+                # 视为文件路径
+                save_path = args.checkpoint
+            # 确保父目录存在（文件路径情况）
+            save_path.parent.mkdir(parents=True, exist_ok=True)
     else:
         save_dir = args.project_root / "checkpoints"
         save_dir.mkdir(parents=True, exist_ok=True)
