@@ -26,7 +26,7 @@ build_dataset.py — 异构特征对齐与张量构造
 
 输出
 ----
-  train_set/tensors/<pair_name>/
+  train_set/tensors/fixed_time/<pair_name>/
     X_v1.pt    — shape (N_samples, T, D) float32
     X_v2.pt    — shape (N_samples, T, D) float32
     Y.pt       — shape (N_samples,) float32      回归标签
@@ -255,11 +255,11 @@ def main():
         help="跳过 Z-score 标准化")
     parser.add_argument(
         "--output-dir", type=Path, default=None,
-        help="输出目录（默认 train_set/tensors）")
+        help="输出目录（默认 train_set/tensors/fixed_time）")
     args = parser.parse_args()
 
     project_root = args.project_root
-    output_base = args.output_dir or (project_root / "train_set" / "tensors")
+    output_base = args.output_dir or (project_root / "train_set" / "tensors" / "fixed_time")
 
     # 配置日志：同时写入文件和输出到控制台
     log_dir = project_root / "log"

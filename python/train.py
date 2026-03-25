@@ -8,9 +8,10 @@ train.py — Siamese-MicroPerf 训练 / 验证脚本
 
 用法
 ----
-  python3 python/train.py                               # 默认参数
+  python3 python/train.py                               # 默认参数（fixed_time）
   python3 python/train.py --epochs 200 --lr 1e-3        # 自定义超参
   python3 python/train.py --pairs O1-g_vs_O3-g          # 只用一组对
+  python3 python/train.py --tensor-base train_set/tensors/fixed_work  # 用固定工作量数据
   python3 python/train.py --eval-only --checkpoint ckpt.pt  # 仅推理
   
 说明
@@ -170,6 +171,9 @@ def main():
         default=Path(__file__).resolve().parent.parent,
         help="项目根目录")
     parser.add_argument(
+        "--tensor-base", type=Path, default=None,
+        help="张量根目录（默认 train_set/tensors/fixed_time）")
+    parser.add_argument(
         "--pairs", nargs="*", default=None,
         help="版本对目录名（默认全部三组）")
     parser.add_argument(
@@ -246,7 +250,7 @@ def main():
     logging.getLogger(__name__).info("设备: %s", device)
 
     # ── 数据加载 ──
-    tensor_base = args.project_root / "train_set" / "tensors"
+    tensor_base = args.tensor_base or (args.project_root / "train_set" / "tensors" / "fixed_time")
     pair_names = args.pairs or DEFAULT_PAIRS
 
     logging.getLogger(__name__).info("加载数据...")
@@ -326,6 +330,7 @@ def main():
         save_dir.mkdir(parents=True, exist_ok=True)
         save_path = save_dir / "best_model.pt"
 
+    logging.getLogger(__name__).info("模型保存路径: %s", save_path)
     logging.getLogger(__name__).info(
         "\n开始训练 (%d epochs, Huber δ=%s, patience=%d)...",
         args.epochs, args.huber_delta, args.patience)

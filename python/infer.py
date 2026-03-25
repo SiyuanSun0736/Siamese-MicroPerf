@@ -20,17 +20,21 @@ infer.py — 推理与验证阶段 (Inference / Validation)
 
 用法
 ----
-  # 对已有张量做推理（自动读取全部版本对）
-  python3 python/infer.py --checkpoint python/best_model.pt
+  # 对已有张量做推理（默认 fixed_time）
+  python3 python/infer.py --checkpoint checkpoints/best_model.pt
+
+  # 使用固定工作量张量
+  python3 python/infer.py --checkpoint checkpoints/best_model.pt \\
+      --tensor-base train_set/tensors/fixed_work
 
   # 只推理指定版本对
-  python3 python/infer.py --checkpoint python/best_model.pt \\
+  python3 python/infer.py --checkpoint checkpoints/best_model.pt \\
       --pairs O2-bolt_vs_O2-bolt-opt
 
   # 对两个原始 CSV 做单次推理
-  python3 python/infer.py --checkpoint python/best_model.pt \\
+  python3 python/infer.py --checkpoint checkpoints/best_model.pt \\
       --csv-v1 path/to/v1.csv --csv-v2 path/to/v2.csv \\
-      --stats train_set/tensors/O2-bolt_vs_O2-bolt-opt/stats.json
+      --stats train_set/tensors/fixed_time/O2-bolt_vs_O2-bolt-opt/stats.json
 """
 
 import argparse
@@ -232,6 +236,9 @@ def main():
 
     # 张量模式参数
     parser.add_argument(
+        "--tensor-base", type=Path, default=None,
+        help="张量根目录（默认 train_set/tensors/fixed_time）")
+    parser.add_argument(
         "--pairs", nargs="*", default=None,
         help="版本对目录名（默认全部三组）")
 
@@ -296,7 +303,7 @@ def main():
         return
 
     # ── 张量模式 ──
-    tensor_base = args.project_root / "train_set" / "tensors"
+    tensor_base = args.tensor_base or (args.project_root / "train_set" / "tensors" / "fixed_time")
     pair_names = args.pairs or [
         "O1-g_vs_O3-g",
         "O2-bolt_vs_O2-bolt-opt",

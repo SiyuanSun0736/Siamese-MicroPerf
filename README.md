@@ -1,40 +1,413 @@
-### 1. 物理采集与标签生成 (Data Collection & Labeling)
-* **前提条件**：固定 eBPF/perf 的时间窗口（例如 $T=10$ 秒），采集过程需尽可能隔离系统后台高负载噪声。
-* **输入变量**：同一种算法的两个编译/重排版本 $v1$ 和 $v2$（例如 O2-bolt 与 O2-bolt-opt）。
-* **操作机制**：
-  * 在固定窗口内循环执行 $v1$ 和 $v2$，记录实际执行次数 $N_{v1}$ 和 $N_{v2}$。
-  * **连续目标生成**：计算实际性能加速比作为回归标签 $Y = N_{v1} / N_{v2}$。
-  * 并发采集前端硬件事件（`L1-icache-load-misses`, `iTLB-load-misses`, `branch-misses` 等瞬时值）与 LBR 物理跳转轨迹。
+# Siamese-MicroPerf
 
-### 2. 异构特征对齐与张量构造 (Feature Engineering)
-* **前提条件**：隔离宏观执行时间的影响，使特征矩阵仅反映微观架构阻力，并消除多维度特征的绝对值域差异。
-* **变量映射**：
-  * **PMU 标度统一**：计算各事件的区间 MPKI（$C_t / I_t \times 1000$），基于独立区间瞬时指令数 $I_t$ 消除漂移风险。
-  * **LBR 极值压缩**：提取 LBR 栈的统计标量（如平均跳转跨度 $X_{lbr\_span}$），执行非线性压缩 $X'_{lbr} = \log(1 + X_{lbr\_span})$。
-  * **跨维度归一化 (Z-score Standardization)**：对齐前对各项特征执行 $X_{norm} = (X - \mu) / \sigma$，防止高绝对值的特征在网络前向传播中形成梯度主导。
-* **输出结构**：拼接生成双塔网络的独立输入张量 $X_{v1}, X_{v2} \in \mathbb{R}^{T \times D}$（其中 $T$ 为时间步序列长度，$D$ 为对齐后的混合特征维度）。
+Siamese-MicroPerf 是一个面向编译优化效果预测的性能建模项目。它通过采集程序运行时的 PMU 计数器和 LBR 分支轨迹，构造时序特征，再使用 Siamese 1D-CNN + Attention Pooling 网络预测两个二进制版本之间的相对性能差异。
 
-### 3. Siamese 网络主干搭建 (1D-CNN + Attention Pooling)
-* **前提条件**：程序生命周期混合了多个阶段，网络需要自行识别并聚焦于决定性能差异的核心热点循环（Hot Loops）。
-* **操作机制**： 
-  * **局部特征提取**：将 $X_{v1}$ 和 $X_{v2}$ 分别输入共享权重的多层 1D-CNN，提取时序上相邻的微架构阻力特征矩阵 $H \in \mathbb{R}^{T \times F}$。
-  * **注意力降维 (Attention Pooling)**：引入可学习的注意力层，计算各个时间步的重要性权重 $A = \text{Softmax}(W_{att} H^T)$。
-  * **特征加权聚合**：将时间步特征按权重求和得到定长向量 $V = \sum_{t=1}^T A_t H_t$，从而在保留阶段差异的同时跨越了物理吞吐率不同导致的相位错位。
+当前仓库同时包含两部分能力：
 
-### 4. 连续空间映射与鲁棒梯度驱动 (Loss Computation)
-* **前提条件**：网络需要拟合连续的性能提升比例，同时必须抵抗由操作系统调度、中断等引发的非编译级吞吐量噪声。
-* **操作机制**：
-  * 将两个版本的聚合特征向量相减或拼接（如 $\Delta V = V_{v1} - V_{v2}$），输入多层感知机（MLP）。
-  * MLP 末端**不使用限制性激活函数**，直接输出预测的相对加速比连续标量 $\hat{Y} \in \mathbb{R}^+$。
-  * **鲁棒损失计算**：结合第一步生成的真实标签 $Y$，计算 Huber Loss：
-    当误差 $|\hat{Y} - Y| \le \delta$ 时，$L = \frac{1}{2}(\hat{Y} - Y)^2$；
-    当误差 $|\hat{Y} - Y| > \delta$ 时，$L = \delta |\hat{Y} - Y| - \frac{1}{2}\delta^2$。
-  * 反向传播更新 MLP、注意力层与 1D-CNN 权重。
+- 一个 Linux PMU 采样器 `pmu_monitor`，负责按固定时间间隔采集硬件事件。
+- 一套 Python 训练与推理流水线，负责从采样日志构建张量、训练模型并做性能对比预测。
 
-### 5. 推理与验证阶段（Inference / Validation）
-* **前提条件**：验证必须在同构工作负载的配对版本间进行。
-* **输出变量**：一个单一的相对加速比预测值 $\hat{Y}$（标量）。
-* **机制与判断逻辑**：
-  * **物理含义**：预测值 $\hat{Y}$ 代表模型认为“版本 $v1$ 吞吐量是版本 $v2$ 吞吐量的多少倍”。
-  * 若 $\hat{Y} > 1.0$：模型判定 $v1$ 效率高于 $v2$，且偏离 $1.0$ 的幅度代表优势大小。
-  * 若 $\hat{Y} < 1.0$：模型判定 $v2$ 优于 $v1$。
+项目默认面向 LLVM test-suite 及其不同编译/后链接优化变体，例如 O1-g、O3-g、O2-bolt、O2-bolt-opt、O3-bolt、O3-bolt-opt。
+
+## 项目目标
+
+给定同一程序的两个版本 `v1` 和 `v2`，模型输出一个连续值 `Y_hat`，表示 `v1` 相对 `v2` 的性能倍率。
+
+- `Y_hat > 1.0`：模型判断 `v1` 更快
+- `Y_hat < 1.0`：模型判断 `v2` 更快
+- 推理脚本默认用 `±5%` 作为近似持平区间
+
+这个设计适合用于回答类似问题：
+
+- 某个 BOLT 优化版本是否真的比基线更快
+- 不同编译选项是否带来了稳定的微架构收益
+- 仅从 PMU/LBR 行为能否预测程序版本间的相对速度关系
+
+## 核心组成
+
+### 1. PMU 采集器
+
+`pmu_monitor` 由 C 代码实现，负责周期性采集：
+
+- `inst_retired.any`
+- `L1-icache-load-misses`
+- `iTLB-loads`
+- `iTLB-load-misses`
+- `branch-instructions`
+- `branch-misses`
+- LBR 统计特征 `lbr_avg_span` / `lbr_log1p_span`
+
+它支持：
+
+- 指定 PID 监控
+- 全系统模式
+- 自定义采样间隔
+- `-T` 线程跟踪模式，用于为新线程挂载 LBR 采样
+- `-E` 输出 `time_enabled` / `time_running` 字段
+
+输出会写到 `log/pmu_monitor_*.csv`，并维护软链接 `log/pmu_monitor.csv` 指向最新文件。
+
+### 2. 特征工程
+
+Python 侧会把原始计数器转换为模型可用的时序特征：
+
+- 5 个 PMU 事件转换为 MPKI
+- 1 个 LBR 特征 `lbr_log1p_span`
+- 序列统一为时间步 `T`
+- 默认做全局 Z-score 标准化
+
+最终每个样本的输入维度为 6 个特征。
+
+### 3. 模型结构
+
+模型定义在 `python/model.py`，主要由三部分组成：
+
+- 共享权重的 1D CNN Backbone
+- Mask-aware Attention Pooling
+- MLP 回归头
+
+两个版本分别经过共享编码器后得到向量表示，再融合 `[V_v1; V_v2; V_v1 - V_v2]` 做回归，输出相对性能倍率。
+
+### 4. 训练与推理
+
+训练脚本 `python/train.py` 负责：
+
+- 加载一组或多组版本对张量
+- 划分训练集/验证集
+- 使用 Huber Loss 训练模型
+- 自动保存最佳检查点到 `checkpoints/best_model.pt`
+
+推理脚本 `python/infer.py` 支持两种模式：
+
+- 基于已有 `.pt` 张量批量推理
+- 基于两份原始 CSV 做实时特征提取后单次推理
+
+## 仓库结构
+
+```text
+.
+├── Makefile                     # 编译 pmu_monitor
+├── src/                         # PMU / LBR / 输出 / 线程跟踪实现
+├── test/                        # C 侧测试工作负载
+├── python/                      # 数据集构建、模型、训练、推理、可视化
+├── train_set/                   # 数据采集脚本、manifest、训练张量、变体数据
+├── checkpoints/                 # 训练输出模型
+├── log/                         # PMU、训练、推理日志
+├── docs/                        # 项目设计说明
+└── llvm-test-suite/             # 基准测试来源
+```
+
+## 环境要求
+
+### 系统要求
+
+- Linux
+- 支持 `perf_event_open`
+- 建议 x86_64 Linux 主机
+- 需要足够权限访问硬件性能计数器
+
+如果 `perf_event_paranoid > 1`，跨进程采样可能失败。常见处理方式：
+
+```bash
+echo 1 | sudo tee /proc/sys/kernel/perf_event_paranoid
+```
+
+采集脚本通常建议直接使用 `sudo` 运行。
+
+### 编译依赖
+
+- `gcc`
+- `make`
+- 标准 Linux 开发环境
+
+### Python 依赖
+
+`requirements.txt` 当前包含：
+
+- `numpy`
+- `pandas`
+- `matplotlib`
+- `torch`
+
+安装方式：
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+## 快速开始
+
+### 1. 编译 PMU 采集器
+
+```bash
+make
+```
+
+默认会生成可执行文件：
+
+```text
+./pmu_monitor
+```
+
+### 2. 运行采集器自测
+
+```bash
+./test_pmu_monitor.sh
+```
+
+这个脚本会：
+
+- 编译 `pmu_monitor`
+- 编译测试工作负载 `test/test_workload`
+- 启动工作负载并监控
+- 检查输出 CSV 是否存在、行数是否合理、时间列是否单调递增
+
+### 3. 使用现有张量直接训练
+
+如果 `train_set/tensors/` 下已经存在构建好的张量，可以直接训练：
+
+```bash
+python3 python/train.py --epochs 150
+```
+
+训练输出：
+
+- 最佳模型：`checkpoints/best_model.pt`
+- 日志文件：`log/train_*.log`
+
+### 4. 使用已有模型做推理
+
+```bash
+python3 python/infer.py --checkpoint checkpoints/best_model.pt
+```
+
+推理输出会写到控制台和 `log/infer_*.log`。
+
+## 完整数据流水线
+
+如果你希望从 PMU 采集开始完整跑通，可以按下面流程执行。
+
+### 第一步：准备变体二进制并采集 PMU 数据
+
+项目提供了自动脚本：
+
+```bash
+cd train_set
+sudo ./generate_train_set.sh
+```
+
+这个脚本会依次处理：
+
+- `O1-g`
+- `O3-g`
+- `O2-bolt`
+- `O2-bolt-opt`
+- `O3-bolt`
+- `O3-bolt-opt`
+
+内部调用的关键脚本包括：
+
+- `train_set/extract_elf.sh`
+- `train_set/collect_dataset_testbench.sh`
+- `train_set/bolt_optimize.sh`
+
+采集产物主要有两类：
+
+- `train_set/data/<variant>/...csv`：每个程序的 PMU 时序
+- `train_set/manifest_<variant>.jsonl`：每个程序的元数据和 `run_count`
+
+### 第二步：构建训练张量
+
+#### 固定时间机制
+
+默认机制是固定时间窗口，标签为运行次数之比：
+
+```bash
+python3 python/build_dataset.py
+```
+
+输出目录默认是：
+
+```text
+train_set/tensors/fixed_time/
+```
+
+每个版本对会生成：
+
+- `X_v1.pt`
+- `X_v2.pt`
+- `Y.pt`
+- `len_v1.pt` / `len_v2.pt`（若存在）
+- `programs.json`
+- `stats.json`
+
+#### 固定工作量机制
+
+项目还提供固定工作量视角的数据构建脚本：
+
+```bash
+python3 python/build_dataset_fixedwork.py
+```
+
+输出目录默认是：
+
+```text
+train_set/tensors/fixed_work/
+```
+
+这个版本会把有效序列长度也作为重要信息保留下来，更适合表达“完成同等工作量所需时间”的差异。
+
+### 第三步：训练模型
+
+#### 使用默认固定时间数据训练
+
+```bash
+python3 python/train.py
+```
+
+#### 使用固定工作量数据训练
+
+```bash
+python3 python/train.py --tensor-base train_set/tensors/fixed_work
+```
+
+#### 只训练指定版本对
+
+```bash
+python3 python/train.py --pairs O1-g_vs_O3-g
+```
+
+#### 只评估已有模型
+
+```bash
+python3 python/train.py \
+  --eval-only \
+  --checkpoint checkpoints/best_model.pt
+```
+
+常用训练参数：
+
+- `--epochs`，默认 150
+- `--batch-size`，默认 32
+- `--lr`，默认 `1e-3`
+- `--weight-decay`，默认 `1e-4`
+- `--patience`，默认 30
+- `--noise-std`，默认 0.05
+
+### 第四步：推理与验证
+
+#### 对全部默认版本对推理
+
+```bash
+python3 python/infer.py --checkpoint checkpoints/best_model.pt
+```
+
+#### 对固定工作量张量推理
+
+```bash
+python3 python/infer.py \
+  --checkpoint checkpoints/best_model.pt \
+  --tensor-base train_set/tensors/fixed_work
+```
+
+#### 对指定版本对推理
+
+```bash
+python3 python/infer.py \
+  --checkpoint checkpoints/best_model.pt \
+  --pairs O2-bolt_vs_O2-bolt-opt
+```
+
+#### 对两份原始 CSV 直接推理
+
+```bash
+python3 python/infer.py \
+  --checkpoint checkpoints/best_model.pt \
+  --csv-v1 path/to/v1.csv \
+  --csv-v2 path/to/v2.csv \
+  --stats train_set/tensors/fixed_time/O2-bolt_vs_O2-bolt-opt/stats.json
+```
+
+## `pmu_monitor` 用法
+
+基本用法：
+
+```bash
+sudo ./pmu_monitor [PID] [-i interval_ms] [-T] [-E]
+```
+
+示例：
+
+```bash
+sudo ./pmu_monitor
+sudo ./pmu_monitor 12345
+sudo ./pmu_monitor 12345 -i 200
+sudo ./pmu_monitor 12345 -T
+sudo ./pmu_monitor 12345 -E
+```
+
+说明：
+
+- 不传 PID 时默认做全系统采样
+- `-i` 控制采样周期，默认 `1000 ms`
+- `-T` 为新线程单独挂载 LBR 事件，只适用于指定 PID 模式
+- `-E` 在 CSV 中额外输出复用修正相关字段
+
+## 默认训练版本对
+
+当前代码默认训练和推理以下 3 组版本对：
+
+- `O1-g_vs_O3-g`
+- `O2-bolt_vs_O2-bolt-opt`
+- `O3-bolt_vs_O3-bolt-opt`
+
+## 关键输出文件
+
+### 采样阶段
+
+- `log/pmu_monitor_*.csv`
+- `train_set/data/<variant>/*.csv`
+- `train_set/manifest_<variant>.jsonl`
+
+### 训练阶段
+
+- `checkpoints/best_model.pt`
+- `log/train_*.log`
+
+### 推理阶段
+
+- `log/infer_*.log`
+
+## 已有文档
+
+如果你想看更细的设计说明，可以从这些文档继续阅读：
+
+- `docs/README.md`
+- `docs/algorithm.md`
+- `docs/bolt.md`
+- `docs/llvm-test-suite.md`
+- `python/algorithm.md`
+
+## 注意事项
+
+- 该项目强依赖 Linux 性能计数器环境，不能简单移植到无 `perf_event_open` 的平台。
+- PMU 采集对系统噪声敏感，训练数据质量很大程度上取决于采集隔离度。
+- 固定时间机制和固定工作量机制标签语义不同，训练和推理时要保持一致。
+- `train_set/manifest_*.jsonl` 中 `run_count=0` 的样本会在数据构建阶段被跳过。
+
+## 一条最短可运行路径
+
+如果你只是想快速验证仓库功能，建议直接执行：
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+make
+python3 python/train.py --epochs 10
+python3 python/infer.py --checkpoint checkpoints/best_model.pt
+```
+
+如果 `train_set/tensors/fixed_time/` 已经存在，这条路径就可以直接跑通训练与推理。
