@@ -45,33 +45,48 @@ DEFAULT_PAIRS = [
 # ── 数据加载 ──────────────────────────────────────────────────────────────────
 
 def load_pair_tensors(tensor_dir: Path):
-    """加载一组版本对的张量，返回 (X_v1, X_v2, Y)。"""
+    """加载一组版本对的张量，返回 (X_v1, X_v2, Y, len_v1, len_v2)。"""
     X_v1 = torch.load(tensor_dir / "X_v1.pt", weights_only=True)
     X_v2 = torch.load(tensor_dir / "X_v2.pt", weights_only=True)
     Y = torch.load(tensor_dir / "Y.pt", weights_only=True)
-    return X_v1, X_v2, Y
+
+    # 兼容旧数据集（无 len_*.pt 时用序列全长）
+    len_v1_path = tensor_dir / "len_v1.pt"
+    len_v2_path = tensor_dir / "len_v2.pt"
+    if len_v1_path.exists() and len_v2_path.exists():
+        len_v1 = torch.load(len_v1_path, weights_only=True)
+        len_v2 = torch.load(len_v2_path, weights_only=True)
+    else:
+        T = X_v1.shape[1]
+        len_v1 = torch.full((X_v1.shape[0],), T, dtype=torch.long)
+        len_v2 = torch.full((X_v2.shape[0],), T, dtype=torch.long)
+
+    return X_v1, X_v2, Y, len_v1, len_v2
 
 
 def merge_pairs(tensor_base: Path, pair_names: list[str]):
     """合并多组版本对的数据。"""
-    all_v1, all_v2, all_y = [], [], []
+    all_v1, all_v2, all_y, all_lv1, all_lv2 = [], [], [], [], []
     for name in pair_names:
         d = tensor_base / name
         if not d.exists():
             logging.getLogger(__name__).warning("跳过不存在的目录: %s", d)
             continue
-        x1, x2, y = load_pair_tensors(d)
+        x1, x2, y, lv1, lv2 = load_pair_tensors(d)
         all_v1.append(x1)
         all_v2.append(x2)
         all_y.append(y)
+        all_lv1.append(lv1)
+        all_lv2.append(lv2)
         logging.getLogger(__name__).info("  加载 %s: %d 样本", name, x1.shape[0])
     if not all_v1:
         print("[ERROR] 无可用数据", file=sys.stderr)
         sys.exit(1)
-    return torch.cat(all_v1), torch.cat(all_v2), torch.cat(all_y)
+    return (torch.cat(all_v1), torch.cat(all_v2), torch.cat(all_y),
+            torch.cat(all_lv1), torch.cat(all_lv2))
 
 
-def train_val_split(X_v1, X_v2, Y, val_ratio=0.2, seed=42):
+def train_val_split(X_v1, X_v2, Y, len_v1, len_v2, val_ratio=0.2, seed=42):
     """按比例随机划分训练集和验证集。"""
     N = X_v1.shape[0]
     indices = np.arange(N)
@@ -84,22 +99,38 @@ def train_val_split(X_v1, X_v2, Y, val_ratio=0.2, seed=42):
 
     return (
         X_v1[train_idx], X_v2[train_idx], Y[train_idx],
+        len_v1[train_idx], len_v2[train_idx],
         X_v1[val_idx], X_v2[val_idx], Y[val_idx],
+        len_v1[val_idx], len_v2[val_idx],
     )
 
 
 # ── 训练循环 ──────────────────────────────────────────────────────────────────
 
-def train_one_epoch(model, loader, criterion, optimizer, device):
+def train_one_epoch(model, loader, criterion, optimizer, device,
+                    max_grad_norm: float = 1.0,
+                    noise_std: float = 0.0):
     model.train()
     total_loss = 0.0
     n = 0
-    for x1, x2, y in loader:
+    for x1, x2, y, lv1, lv2 in loader:
         x1, x2, y = x1.to(device), x2.to(device), y.to(device)
+        lv1, lv2 = lv1.to(device), lv2.to(device)
+
+        # 数据增强：对有效区域添加高斯噪声
+        if noise_std > 0:
+            x1 = x1 + torch.randn_like(x1) * noise_std
+            x2 = x2 + torch.randn_like(x2) * noise_std
+
         optimizer.zero_grad()
-        y_hat = model(x1, x2)
+        y_hat = model(x1, x2, lv1, lv2)
         loss = criterion(y_hat, y)
         loss.backward()
+
+        # 梯度裁剪：防止梯度爆炸
+        if max_grad_norm > 0:
+            nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
+
         optimizer.step()
         total_loss += loss.item() * y.size(0)
         n += y.size(0)
@@ -112,9 +143,10 @@ def evaluate(model, loader, criterion, device):
     total_loss = 0.0
     all_pred, all_true = [], []
     n = 0
-    for x1, x2, y in loader:
+    for x1, x2, y, lv1, lv2 in loader:
         x1, x2, y = x1.to(device), x2.to(device), y.to(device)
-        y_hat = model(x1, x2)
+        lv1, lv2 = lv1.to(device), lv2.to(device)
+        y_hat = model(x1, x2, lv1, lv2)
         loss = criterion(y_hat, y)
         total_loss += loss.item() * y.size(0)
         n += y.size(0)
@@ -167,6 +199,18 @@ def main():
     parser.add_argument(
         "--eval-only", action="store_true",
         help="仅评估模式")
+    parser.add_argument(
+        "--patience", type=int, default=30,
+        help="早停耐心值（验证 loss 连续多少 epoch 不下降时停止）")
+    parser.add_argument(
+        "--grad-clip", type=float, default=1.0,
+        help="梯度裁剪最大范数")
+    parser.add_argument(
+        "--noise-std", type=float, default=0.05,
+        help="训练时高斯噪声标准差（数据增强）")
+    parser.add_argument(
+        "--warmup-epochs", type=int, default=10,
+        help="学习率线性预热轮数")
     # 模型超参
     parser.add_argument("--cnn-hidden", type=int, default=64)
     parser.add_argument("--cnn-out", type=int, default=128)
@@ -206,7 +250,7 @@ def main():
     pair_names = args.pairs or DEFAULT_PAIRS
 
     logging.getLogger(__name__).info("加载数据...")
-    X_v1, X_v2, Y = merge_pairs(tensor_base, pair_names)
+    X_v1, X_v2, Y, len_v1, len_v2 = merge_pairs(tensor_base, pair_names)
     logging.getLogger(__name__).info(
         "总样本数: %d  序列长度 T=%d  特征维度 D=%d",
         X_v1.shape[0], X_v1.shape[1], X_v1.shape[2])
@@ -214,13 +258,15 @@ def main():
     in_features = X_v1.shape[2]  # D
 
     # ── 划分训练/验证集 ──
-    X_v1_tr, X_v2_tr, Y_tr, X_v1_val, X_v2_val, Y_val = \
-        train_val_split(X_v1, X_v2, Y, val_ratio=args.val_ratio, seed=args.seed)
+    X_v1_tr, X_v2_tr, Y_tr, lv1_tr, lv2_tr, \
+        X_v1_val, X_v2_val, Y_val, lv1_val, lv2_val = \
+        train_val_split(X_v1, X_v2, Y, len_v1, len_v2,
+                        val_ratio=args.val_ratio, seed=args.seed)
 
     logging.getLogger(__name__).info("训练集: %d  验证集: %d", Y_tr.shape[0], Y_val.shape[0])
 
-    train_ds = TensorDataset(X_v1_tr, X_v2_tr, Y_tr)
-    val_ds = TensorDataset(X_v1_val, X_v2_val, Y_val)
+    train_ds = TensorDataset(X_v1_tr, X_v2_tr, Y_tr, lv1_tr, lv2_tr)
+    val_ds = TensorDataset(X_v1_val, X_v2_val, Y_val, lv1_val, lv2_val)
 
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=args.batch_size)
@@ -258,10 +304,20 @@ def main():
     # ── 训练 ──
     optimizer = torch.optim.Adam(
         model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=args.epochs)
+
+    # 学习率调度：线性预热 + 余弦退火
+    def lr_lambda(epoch):
+        if epoch < args.warmup_epochs:
+            return (epoch + 1) / args.warmup_epochs
+        progress = (epoch - args.warmup_epochs) / max(1, args.epochs - args.warmup_epochs)
+        return 0.5 * (1.0 + np.cos(np.pi * progress))
+
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
     best_val_loss = float("inf")
+    patience_counter = 0
+    best_epoch = 0
+    best_model_state = None
     # 决定模型保存路径：优先使用 --checkpoint，否则放到 project_root/checkpoints/best_model.pt
     if args.checkpoint:
         save_path = args.checkpoint
@@ -271,14 +327,17 @@ def main():
         save_path = save_dir / "best_model.pt"
 
     logging.getLogger(__name__).info(
-        "\n开始训练 (%d epochs, Huber δ=%s)...", args.epochs, args.huber_delta)
+        "\n开始训练 (%d epochs, Huber δ=%s, patience=%d)...",
+        args.epochs, args.huber_delta, args.patience)
     logging.getLogger(__name__).info(
         "%-6s  %-11s  %-10s  %-9s  %-10s  %s",
         'Epoch', 'Train Loss', 'Val Loss', 'Val MAE', 'LR', 'Status')
     logging.getLogger(__name__).info("%s", '-' * 70)
 
     for epoch in range(1, args.epochs + 1):
-        train_loss = train_one_epoch(model, train_loader, criterion, optimizer, device)
+        train_loss = train_one_epoch(
+            model, train_loader, criterion, optimizer, device,
+            max_grad_norm=args.grad_clip, noise_std=args.noise_std)
         val_loss, val_mae, _, _ = evaluate(model, val_loader, criterion, device)
         scheduler.step()
 
@@ -287,27 +346,37 @@ def main():
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
+            patience_counter = 0
+            best_epoch = epoch
+            best_model_state = {k: v.clone() for k, v in model.state_dict().items()}
             torch.save({
                 "epoch": epoch,
                 "model_state_dict": model.state_dict(),
-                "optimizer_state_dict": optimizer.state_dict(),
-                "val_loss": val_loss,
-                "val_mae": val_mae,
+                "val_loss": float(val_loss),
+                "val_mae": float(val_mae),
             }, save_path)
             status = "← best"
+        else:
+            patience_counter += 1
 
         if epoch % 10 == 0 or epoch == 1 or status:
             logging.getLogger(__name__).info(
                 "%6d  %11.6f  %10.6f  %9.4f  %10.2e  %s",
                 epoch, train_loss, val_loss, val_mae, lr, status)
 
+        # 早停检查
+        if patience_counter >= args.patience:
+            logging.getLogger(__name__).info(
+                "\n早停触发: 验证 loss 连续 %d epoch 未改善", args.patience)
+            break
+
     # ── 最终评估 ──
-    ckpt = torch.load(save_path, map_location=device)
-    model.load_state_dict(ckpt["model_state_dict"])
+    if best_model_state is not None:
+        model.load_state_dict(best_model_state)
     val_loss, val_mae, pred, true = evaluate(model, val_loader, criterion, device)
 
     logging.getLogger(__name__).info("%s", '=' * 60)
-    logging.getLogger(__name__).info("最佳模型 (epoch %d)", ckpt['epoch'])
+    logging.getLogger(__name__).info("最佳模型 (epoch %d)", best_epoch)
     logging.getLogger(__name__).info("  Val Loss = %.6f", val_loss)
     logging.getLogger(__name__).info("  Val MAE  = %.4f", val_mae)
     logging.getLogger(__name__).info("  模型保存: %s", save_path)

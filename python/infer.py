@@ -82,6 +82,17 @@ def infer_from_tensors(model, tensor_dir: Path, device: torch.device):
     X_v1 = torch.load(tensor_dir / "X_v1.pt", weights_only=True).to(device)
     X_v2 = torch.load(tensor_dir / "X_v2.pt", weights_only=True).to(device)
 
+    # 有效长度（兼容旧数据集）
+    len_v1_path = tensor_dir / "len_v1.pt"
+    len_v2_path = tensor_dir / "len_v2.pt"
+    if len_v1_path.exists() and len_v2_path.exists():
+        len_v1 = torch.load(len_v1_path, weights_only=True).to(device)
+        len_v2 = torch.load(len_v2_path, weights_only=True).to(device)
+    else:
+        T = X_v1.shape[1]
+        len_v1 = torch.full((X_v1.shape[0],), T, dtype=torch.long, device=device)
+        len_v2 = torch.full((X_v2.shape[0],), T, dtype=torch.long, device=device)
+
     # 标签（可能存在）
     y_path = tensor_dir / "Y.pt"
     Y = torch.load(y_path, weights_only=True) if y_path.exists() else None
@@ -99,7 +110,7 @@ def infer_from_tensors(model, tensor_dir: Path, device: torch.device):
         v1_name, v2_name = "v1", "v2"
 
     # 批量前向
-    Y_hat = model(X_v1, X_v2).cpu()
+    Y_hat = model(X_v1, X_v2, len_v1, len_v2).cpu()
     N = Y_hat.shape[0]
 
     return Y_hat, Y, programs, v1_name, v2_name
@@ -174,21 +185,26 @@ def infer_from_csv(model, csv_v1: Path, csv_v2: Path,
     v1_name = stats.get("v1", "v1")
     v2_name = stats.get("v2", "v2")
 
-    feat1 = extract_features(csv_v1, seq_len)
-    feat2 = extract_features(csv_v2, seq_len)
-    if feat1 is None or feat2 is None:
+    result1 = extract_features(csv_v1, seq_len)
+    result2 = extract_features(csv_v2, seq_len)
+    if result1 is None or result2 is None:
         logging.error("特征提取失败")
         sys.exit(1)
 
-    # Z-score 归一化（复用训练集统计量）
-    feat1 = (feat1 - mu) / sigma
-    feat2 = (feat2 - mu) / sigma
+    feat1, vlen1 = result1
+    feat2, vlen2 = result2
+
+    # Z-score 归一化（复用训练集统计量，仅对有效区域）
+    feat1[:vlen1] = (feat1[:vlen1] - mu) / sigma
+    feat2[:vlen2] = (feat2[:vlen2] - mu) / sigma
 
     # (1, T, D)
     x1 = torch.from_numpy(feat1).unsqueeze(0).to(device)
     x2 = torch.from_numpy(feat2).unsqueeze(0).to(device)
+    lv1 = torch.tensor([vlen1], dtype=torch.long, device=device)
+    lv2 = torch.tensor([vlen2], dtype=torch.long, device=device)
 
-    y_hat = model(x1, x2).item()
+    y_hat = model(x1, x2, lv1, lv2).item()
     verdict = judge(y_hat, v1_name, v2_name)
 
     logging.info("%s", "=" * 60)

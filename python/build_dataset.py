@@ -92,17 +92,18 @@ def load_manifest(manifest_path: Path) -> dict[str, dict]:
     return entries
 
 
-def extract_features(csv_path: Path, seq_len: int) -> np.ndarray | None:
+def extract_features(csv_path: Path, seq_len: int) -> tuple[np.ndarray, int] | None:
     """
-    从单个 PMU CSV 提取特征矩阵 (T, D)。
+    从单个 PMU CSV 提取特征矩阵 (T, D) 及有效长度。
 
     步骤：
       1. 读取 CSV，丢弃 elapsed_ms / timestamp 元数据列
       2. 将 5 个 PMU 计数器转为 MPKI（C_t / I_t × 1000）
-      3. 保留 lbr_log1p_span 作为 LBR 特征
-      4. 截断或填充到 seq_len 行
+      3. 丢弃 I_t=0 的无效行（避免幻影 MPKI 尖刺）
+      4. 保留 lbr_log1p_span 作为 LBR 特征
+      5. 截断或填充到 seq_len 行，记录有效长度
 
-    返回 np.ndarray (seq_len, D)，失败返回 None。
+    返回 (np.ndarray (seq_len, D), valid_len)，失败返回 None。
     """
     try:
         df = pd.read_csv(csv_path)
@@ -117,9 +118,16 @@ def extract_features(csv_path: Path, seq_len: int) -> np.ndarray | None:
         logging.getLogger(__name__).warning("%s 缺少列: %s", csv_path, missing)
         return None
 
-    # 取指令数作为 MPKI 分母，避免除零
+    # 取指令数作为 MPKI 分母
     inst: np.ndarray = df[INST_COL].to_numpy(dtype=np.float64)
-    inst = np.where(inst == 0, 1.0, inst)  # 防止除零
+
+    # 丢弃 I_t=0 的行：这些行代表程序挂起/IO阻塞，MPKI 无物理意义
+    valid_mask = inst > 0
+    if valid_mask.sum() == 0:
+        logging.getLogger(__name__).warning("%s: 所有行 inst=0，跳过", csv_path)
+        return None
+    df = df.loc[valid_mask].reset_index(drop=True)
+    inst = inst[valid_mask]
 
     features = []
 
@@ -136,14 +144,15 @@ def extract_features(csv_path: Path, seq_len: int) -> np.ndarray | None:
     feat_matrix = np.column_stack(features)
     T_raw, D = feat_matrix.shape
 
-    # 截断或零填充到 seq_len
+    # 截断或零填充到 seq_len，记录有效长度
+    valid_len = min(T_raw, seq_len)
     if T_raw >= seq_len:
         feat_matrix = feat_matrix[:seq_len]
     else:
         pad = np.zeros((seq_len - T_raw, D), dtype=np.float64)
         feat_matrix = np.concatenate([feat_matrix, pad], axis=0)
 
-    return feat_matrix.astype(np.float32)
+    return feat_matrix.astype(np.float32), valid_len
 
 
 def build_pair_dataset(
@@ -151,7 +160,8 @@ def build_pair_dataset(
     v2_name: str,
     project_root: Path,
     seq_len: int,
-) -> tuple[list[np.ndarray], list[np.ndarray], list[float], list[str]]:
+) -> tuple[list[np.ndarray], list[np.ndarray], list[float], list[str],
+           list[int], list[int]]:
     """
     为一个版本对构建数据集。
 
@@ -168,10 +178,10 @@ def build_pair_dataset(
 
     if not m1_path.exists():
         logging.getLogger(__name__).error("manifest 不存在: %s", m1_path)
-        return [], [], [], []
+        return [], [], [], [], [], []
     if not m2_path.exists():
         logging.getLogger(__name__).error("manifest 不存在: %s", m2_path)
-        return [], [], [], []
+        return [], [], [], [], [], []
 
     m1 = load_manifest(m1_path)
     m2 = load_manifest(m2_path)
@@ -179,9 +189,10 @@ def build_pair_dataset(
     common_programs = sorted(set(m1.keys()) & set(m2.keys()))
     if not common_programs:
         logging.getLogger(__name__).warning("%s 与 %s 无公共程序", v1_name, v2_name)
-        return [], [], [], []
+        return [], [], [], [], [], []
 
     X_v1_list, X_v2_list, Y_list, programs = [], [], [], []
+    len_v1_list, len_v2_list = [], []
 
     for prog in common_programs:
         entry1, entry2 = m1[prog], m2[prog]
@@ -194,17 +205,23 @@ def build_pair_dataset(
                 "%s: CSV 文件缺失 (v1=%s, v2=%s)", prog, csv1.exists(), csv2.exists())
             continue
 
-        feat1 = extract_features(csv1, seq_len)
-        feat2 = extract_features(csv2, seq_len)
+        result1 = extract_features(csv1, seq_len)
+        result2 = extract_features(csv2, seq_len)
 
-        if feat1 is None or feat2 is None:
+        if result1 is None or result2 is None:
             continue
+
+        feat1, vlen1 = result1
+        feat2, vlen2 = result2
 
         # 标签 Y = N_v1 / N_v2
         n1 = entry1.get("run_count", 0)
         n2 = entry2.get("run_count", 0)
         if n2 == 0:
             logging.getLogger(__name__).warning("%s: v2 run_count=0，无法计算标签", prog)
+            continue
+        if n1 == 0:
+            logging.getLogger(__name__).warning("%s: v1 run_count=0，标签为 0（程序可能崩溃/超时），跳过", prog)
             continue
 
         Y = float(n1) / float(n2)
@@ -213,8 +230,10 @@ def build_pair_dataset(
         X_v2_list.append(feat2)
         Y_list.append(Y)
         programs.append(prog)
+        len_v1_list.append(vlen1)
+        len_v2_list.append(vlen2)
 
-    return X_v1_list, X_v2_list, Y_list, programs
+    return X_v1_list, X_v2_list, Y_list, programs, len_v1_list, len_v2_list
 
 
 # ── 主流程 ────────────────────────────────────────────────────────────────────
@@ -286,8 +305,8 @@ def main():
         logging.getLogger(__name__).info("构建 Pair: %s vs %s", v1_name, v2_name)
         logging.getLogger(__name__).info("%s", '=' * 60)
 
-        X_v1_list, X_v2_list, Y_list, programs = build_pair_dataset(
-            v1_name, v2_name, project_root, args.seq_len)
+        X_v1_list, X_v2_list, Y_list, programs, len_v1_list, len_v2_list = \
+            build_pair_dataset(v1_name, v2_name, project_root, args.seq_len)
 
         if not programs:
             logging.getLogger(__name__).warning("无有效样本，跳过此对")
@@ -301,17 +320,32 @@ def main():
         X_v2 = np.stack(X_v2_list, axis=0)  # (N, T, D)
         Y = np.array(Y_list, dtype=np.float32)  # (N,)
 
-        # Z-score 标准化：在全局（两个版本合并）上计算 μ/σ
+        # 构建有效长度数组
+        len_v1 = np.array(len_v1_list, dtype=np.int64)
+        len_v2 = np.array(len_v2_list, dtype=np.int64)
+
+        # Z-score 标准化：仅在有效（非填充）时间步上计算 μ/σ
         if not args.no_zscore:
-            # 合并 v1 和 v2 计算统计量，shape (2*N, T, D) → 在 (样本, 时间步) 两轴上求均值
-            combined = np.concatenate([X_v1, X_v2], axis=0)  # (2N, T, D)
-            mu = combined.mean(axis=(0, 1))   # (D,)
-            sigma = combined.std(axis=(0, 1)) # (D,)
+            # 掩码感知统计量：只对有效时间步求均值和标准差
+            valid_sum = np.zeros(D, dtype=np.float64)
+            valid_sq_sum = np.zeros(D, dtype=np.float64)
+            valid_count = 0
+            for i in range(N):
+                valid_sum += X_v1[i, :len_v1[i], :].sum(axis=0)
+                valid_sq_sum += (X_v1[i, :len_v1[i], :] ** 2).sum(axis=0)
+                valid_count += len_v1[i]
+                valid_sum += X_v2[i, :len_v2[i], :].sum(axis=0)
+                valid_sq_sum += (X_v2[i, :len_v2[i], :] ** 2).sum(axis=0)
+                valid_count += len_v2[i]
+            mu = (valid_sum / valid_count).astype(np.float32)  # (D,)
+            sigma = np.sqrt(valid_sq_sum / valid_count - mu ** 2).astype(np.float32)  # (D,)
             # 防止除零：标准差为 0 的特征保持原值
             sigma = np.where(sigma == 0, 1.0, sigma)
 
-            X_v1 = (X_v1 - mu) / sigma
-            X_v2 = (X_v2 - mu) / sigma
+            # 仅对有效时间步执行归一化，填充区保持为 0
+            for i in range(N):
+                X_v1[i, :len_v1[i], :] = (X_v1[i, :len_v1[i], :] - mu) / sigma
+                X_v2[i, :len_v2[i], :] = (X_v2[i, :len_v2[i], :] - mu) / sigma
         else:
             mu = np.zeros(D, dtype=np.float32)
             sigma = np.ones(D, dtype=np.float32)
@@ -320,6 +354,8 @@ def main():
         X_v1_tensor = torch.from_numpy(X_v1.astype(np.float32))
         X_v2_tensor = torch.from_numpy(X_v2.astype(np.float32))
         Y_tensor = torch.from_numpy(Y)
+        len_v1_tensor = torch.from_numpy(len_v1)
+        len_v2_tensor = torch.from_numpy(len_v2)
 
         # 输出目录
         out_dir = output_base / pair_name
@@ -328,6 +364,8 @@ def main():
         torch.save(X_v1_tensor, out_dir / "X_v1.pt")
         torch.save(X_v2_tensor, out_dir / "X_v2.pt")
         torch.save(Y_tensor, out_dir / "Y.pt")
+        torch.save(len_v1_tensor, out_dir / "len_v1.pt")
+        torch.save(len_v2_tensor, out_dir / "len_v2.pt")
 
         # 程序名映射
         with open(out_dir / "programs.json", "w") as f:

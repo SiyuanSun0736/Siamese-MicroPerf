@@ -4,9 +4,9 @@ model.py — Siamese 网络主干 (1D-CNN + Attention Pooling + MLP)
 ==============================================================
 
 按照 README §3–§4 的设计：
-  - 共享权重的多层 1D-CNN 提取局部时序特征 H ∈ R^{T×F}
-  - Attention Pooling 将变长时序压缩为定长向量 V ∈ R^F
-  - MLP 对 ΔV = V_v1 − V_v2 做回归，输出连续加速比 Ŷ
+  - 共享权重的多层 1D-CNN（带残差连接）提取局部时序特征 H ∈ R^{T×F}
+  - Masked Attention Pooling 将变长时序压缩为定长向量 V ∈ R^F
+  - MLP 对多种融合特征 [ΔV; V_v1; V_v2] 做回归，输出连续加速比 Ŷ
   - 使用 Huber Loss 作为鲁棒损失函数
 """
 
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 class CNNBackbone(nn.Module):
-    """多层 1D-CNN 局部特征提取器。
+    """多层 1D-CNN 局部特征提取器，带残差连接。
 
     输入:  (batch, T, D)   — T 时间步, D 原始特征维度
     输出:  (batch, T, F)   — F 为最终卷积通道数
@@ -41,23 +41,38 @@ class CNNBackbone(nn.Module):
         self.bn3 = nn.BatchNorm1d(out_channels)
         self.dropout = nn.Dropout(dropout)
 
+        # Conv2 残差连接（hidden→hidden 维度相同，直接相加）
+        # Conv3 残差连接（hidden→out 需要投影）
+        self.res_proj = nn.Conv1d(hidden_channels, out_channels, kernel_size=1) \
+            if hidden_channels != out_channels else nn.Identity()
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """x: (batch, T, D) → (batch, T, F)"""
         # (batch, T, D) → (batch, D, T) for Conv1d
         x = x.permute(0, 2, 1)
 
         x = self.dropout(F.relu(self.bn1(self.conv1(x))))
+        # 残差: conv2 输入输出维度相同
+        residual = x
         x = self.dropout(F.relu(self.bn2(self.conv2(x))))
+        x = x + residual
+
+        # 残差: conv3 需要投影
+        residual = self.res_proj(x)
         x = self.dropout(F.relu(self.bn3(self.conv3(x))))
+        x = x + residual
 
         # (batch, F, T) → (batch, T, F)
         return x.permute(0, 2, 1)
 
 
 class AttentionPooling(nn.Module):
-    """注意力降维：将 (batch, T, F) 压缩为 (batch, F)。
+    """掩码感知的注意力降维：将 (batch, T, F) 压缩为 (batch, F)。
 
-    A = Softmax(H @ W_att)          — (batch, T, 1)
+    对填充位置施加 -inf 掩码，使其 softmax 权重为 0，
+    防止零填充区的伪特征污染注意力分配。
+
+    A = Softmax(H @ W_att + mask)   — (batch, T, 1)
     V = Σ_t  A_t · H_t             — (batch, F)
     """
 
@@ -65,11 +80,22 @@ class AttentionPooling(nn.Module):
         super().__init__()
         self.attention = nn.Linear(feature_dim, 1, bias=False)
 
-    def forward(self, h: torch.Tensor) -> torch.Tensor:
-        """h: (batch, T, F) → (batch, F)"""
+    def forward(self, h: torch.Tensor,
+                valid_len: torch.Tensor | None = None) -> torch.Tensor:
+        """h: (batch, T, F), valid_len: (batch,) → (batch, F)"""
         # (batch, T, 1)
         scores = self.attention(h)
+
+        if valid_len is not None:
+            # 构建掩码: (batch, T, 1)，填充位置为 -inf
+            batch_size, T, _ = h.shape
+            positions = torch.arange(T, device=h.device).unsqueeze(0)  # (1, T)
+            mask = positions >= valid_len.unsqueeze(1)  # (batch, T), True=填充
+            scores = scores.masked_fill(mask.unsqueeze(-1), float('-inf'))
+
         weights = F.softmax(scores, dim=1)
+        # 安全处理：全部被 mask 时 softmax 产生 nan，替换为 0
+        weights = torch.nan_to_num(weights, nan=0.0)
         # 加权求和: (batch, T, F) * (batch, T, 1) → sum → (batch, F)
         return (weights * h).sum(dim=1)
 
@@ -78,6 +104,7 @@ class SiameseMicroPerf(nn.Module):
     """Siamese 网络：共享 CNN+Attention 双塔 + MLP 回归头。
 
     输入:  x_v1, x_v2  各 (batch, T, D)
+           len_v1, len_v2  各 (batch,) 有效序列长度（可选）
     输出:  ŷ           (batch,)  — 预测加速比
     """
 
@@ -94,35 +121,45 @@ class SiameseMicroPerf(nn.Module):
         )
         self.pool = AttentionPooling(feature_dim=cnn_out)
 
-        # MLP 回归头：输入 ΔV = V_v1 − V_v2
+        # MLP 回归头：输入 [V_v1; V_v2; ΔV] — 3×F 维度
+        # 保留绝对特征 + 差异特征，信息更丰富
+        mlp_input_dim = cnn_out * 3
         self.mlp = nn.Sequential(
-            nn.Linear(cnn_out, mlp_hidden),
+            nn.Linear(mlp_input_dim, mlp_hidden),
             nn.ReLU(),
             nn.Dropout(dropout),
-            nn.Linear(mlp_hidden, 1),  # 无限制性激活函数，直接输出连续标量
+            nn.Linear(mlp_hidden, mlp_hidden // 2),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(mlp_hidden // 2, 1),  # 无限制性激活函数
         )
 
-    def encode(self, x: torch.Tensor) -> torch.Tensor:
+    def encode(self, x: torch.Tensor,
+               valid_len: torch.Tensor | None = None) -> torch.Tensor:
         """单塔前向：(batch, T, D) → (batch, F)"""
-        h = self.backbone(x)   # (batch, T, F)
-        v = self.pool(h)       # (batch, F)
+        h = self.backbone(x)               # (batch, T, F)
+        v = self.pool(h, valid_len)        # (batch, F)
         return v
 
     def forward(self, x_v1: torch.Tensor,
-                x_v2: torch.Tensor) -> torch.Tensor:
+                x_v2: torch.Tensor,
+                len_v1: torch.Tensor | None = None,
+                len_v2: torch.Tensor | None = None) -> torch.Tensor:
         """
         x_v1: (batch, T, D)
         x_v2: (batch, T, D)
+        len_v1, len_v2: (batch,) 有效序列长度（可选，用于掩码注意力）
         → ŷ:  (batch,)
         """
-        v1 = self.encode(x_v1)   # (batch, F)
-        v2 = self.encode(x_v2)   # (batch, F)
+        v1 = self.encode(x_v1, len_v1)   # (batch, F)
+        v2 = self.encode(x_v2, len_v2)   # (batch, F)
 
-        # §4: ΔV = V_v1 − V_v2
-        delta = v1 - v2           # (batch, F)
+        # §4: 融合特征 [V_v1; V_v2; ΔV]
+        delta = v1 - v2
+        fused = torch.cat([v1, v2, delta], dim=-1)  # (batch, 3*F)
 
         # MLP 回归头输出标量
-        y_hat = self.mlp(delta).squeeze(-1)  # (batch,)
+        y_hat = self.mlp(fused).squeeze(-1)  # (batch,)
         return y_hat
 
 
