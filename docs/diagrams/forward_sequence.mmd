@@ -1,0 +1,11 @@
+flowchart LR
+A1["S_v1"] --> B1["f_theta (shared encoder)"]
+A2["S_v2"] --> B2["f_theta (shared encoder)"]
+B1 --> C1["Pool"]
+B2 --> C2["Pool"]
+C1 --> D1["V_v1"]
+C2 --> D2["V_v2"]
+D1 --> E["Concat: V_v1, V_v2, V_v1-V_v2"]
+D2 --> E
+E --> F["g_phi (MLP)"]
+F --> G["Y_hat"]

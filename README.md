@@ -78,7 +78,43 @@ Python 侧会把原始计数器转换为模型可用的时序特征：
 - Mask-aware Attention Pooling
 - MLP 回归头
 
-每个版本分别经过共享编码器后得到向量表示，再融合 `[V_v1; V_v2; V_v1 - V_v2]` 做回归，输出相对性能倍率。
+```text
+(Seq_v1, Seq_v2) -> Shared Encoder -> Pooling -> [V_v1; V_v2; V_v1 - V_v2] -> MLP -> Continuous Scalar
+```
+
+其中各阶段含义为：
+
+- `Seq_v1` / `Seq_v2`：两个程序版本的 PMU/LBR 时序特征序列
+- `Shared Encoder`：共享参数的时序编码器，用于把两个版本映射到同一表示空间
+- `Pooling`：将时间维隐藏状态压缩为定长向量表示 `V_v1` 和 `V_v2`
+- `[V_v1; V_v2; V_v1 - V_v2]`：拼接两个版本的绝对表示和差分表示，显式保留对比信息
+- `MLP`：把融合后的对比特征映射到回归输出
+- `Continuous Scalar`：最终预测的连续标量 `Y_hat`，表示 `v1` 相对 `v2` 的性能倍率
+
+从整体前向流程看，模型遵循下面这条 Siamese 框架链路：
+
+$$
+(S_{v1}, S_{v2}) \rightarrow f_{\theta} \rightarrow \operatorname{Pool}(\cdot) \rightarrow [V_{v1}; V_{v2}; V_{v1} - V_{v2}] \rightarrow g_{\phi} \rightarrow \hat{Y}
+$$
+
+
+对应的结构图如下：
+
+- 内嵌可交互渲染（浏览器打开）：[docs/diagrams/forward_sequence.html](docs/diagrams/forward_sequence.html#L1)
+- 文档内使用静态 SVG（点击图片可打开可交互视图）：
+![Siamese 前向链路](docs/forward_sequence.svg)
+
+
+其中各阶段含义为：
+
+- $S_{v1}$ 和 $S_{v2}$：两个程序版本对应的 PMU/LBR 时序特征序列
+- $f_{\theta}$：共享参数的时序编码器，用于把两个版本映射到同一表示空间
+- $\operatorname{Pool}(\cdot)$：时间维聚合算子，将隐藏状态压缩为定长表示 $V_{v1}$ 和 $V_{v2}$
+- $[V_{v1}; V_{v2}; V_{v1} - V_{v2}]$：同时保留两个版本的绝对表示与差分表示，以显式编码对比关系
+- $g_{\phi}$：MLP 回归头，将融合后的对比特征映射为最终预测值
+- $\hat{Y}$：模型输出的连续标量，表示版本 $v1$ 相对版本 $v2$ 的性能倍率预测
+
+更具体地说，两个版本的输入序列先经过同一个共享编码器得到隐藏表示，再通过池化得到向量 $V_{v1}$ 和 $V_{v2}$，最后将它们与差分项一起送入 MLP，输出相对性能倍率预测 $\hat{Y}$。
 
 ### 4. 训练与推理
 

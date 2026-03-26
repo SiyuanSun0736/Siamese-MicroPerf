@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Forward Sequence Diagram</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>body{font-family:system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; padding:20px;}</style>
+  </head>
+  <body>
+    <h2>Siamese 前向链路（可视化）</h2>
+    <div class="mermaid">
+flowchart LR
+A1["S_v1"] --> B1["f_theta (shared encoder)"]
+A2["S_v2"] --> B2["f_theta (shared encoder)"]
+B1 --> C1["Pool"]
+B2 --> C2["Pool"]
+C1 --> D1["V_v1"]
+C2 --> D2["V_v2"]
+D1 --> E["Concat: V_v1, V_v2, V_v1-V_v2"]
+D2 --> E
+E --> F["g_phi (MLP)"]
+F --> G["Y_hat"]
+    </div>
+    <script>mermaid.initialize({startOnLoad:true});</script>
+  </body>
+</html>
