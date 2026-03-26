@@ -94,7 +94,7 @@ Python 侧会把原始计数器转换为模型可用的时序特征：
 从整体前向流程看，模型遵循下面这条 Siamese 框架链路：
 
 $$
-(S_{v1}, S_{v2}) \rightarrow f_{\theta} \rightarrow \operatorname{Pool}(\cdot) \rightarrow [V_{v1}; V_{v2}; V_{v1} - V_{v2}] \rightarrow g_{\phi} \rightarrow \hat{Y}
+(S_{v1}, S_{v2}) \rightarrow f_{\theta} \rightarrow \mathrm{Pool}(\cdot) \rightarrow [V_{v1}; V_{v2}; V_{v1} - V_{v2}] \rightarrow g_{\phi} \rightarrow \hat{Y}
 $$
 
 
@@ -109,7 +109,7 @@ $$
 
 - $S_{v1}$ 和 $S_{v2}$：两个程序版本对应的 PMU/LBR 时序特征序列
 - $f_{\theta}$：共享参数的时序编码器，用于把两个版本映射到同一表示空间
-- $\operatorname{Pool}(\cdot)$：时间维聚合算子，将隐藏状态压缩为定长表示 $V_{v1}$ 和 $V_{v2}$
+- $\mathrm{Pool}(\cdot)$：时间维聚合算子，将隐藏状态压缩为定长表示 $V_{v1}$ 和 $V_{v2}$
 - $[V_{v1}; V_{v2}; V_{v1} - V_{v2}]$：同时保留两个版本的绝对表示与差分表示，以显式编码对比关系
 - $g_{\phi}$：MLP 回归头，将融合后的对比特征映射为最终预测值
 - $\hat{Y}$：模型输出的连续标量，表示版本 $v1$ 相对版本 $v2$ 的性能倍率预测
