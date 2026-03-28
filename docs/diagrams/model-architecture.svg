@@ -1,0 +1,732 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   version="1.1"
+   width="1600"
+   height="1460"
+   viewBox="0 0 1600 1460"
+   role="img"
+   aria-labelledby="title desc"
+   id="svg103"
+   sodipodi:docname="model-architecture.svg"
+   inkscape:version="1.4.3 (0d15f75042, 2025-12-25)"
+   inkscape:export-filename="/home/ssy/Pictures/model-architecture.png"
+   inkscape:export-xdpi="96"
+   inkscape:export-ydpi="96"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs103" />
+  <sodipodi:namedview
+     id="namedview103"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="0.77200562"
+     inkscape:cx="792.09268"
+     inkscape:cy="786.91137"
+     inkscape:window-width="1225"
+     inkscape:window-height="1080"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="g82" />
+  <title
+     id="title">Siamese-MicroPerf architecture</title>
+  <desc
+     id="desc">Basic architecture diagram for Siamese-MicroPerf showing paired inputs, a shared encoder with CNN, BiLSTM, or Transformer backbones, mask-aware pooling, explicit contrast fusion, an MLP head, and the final ratio prediction.</desc>
+  <g
+     font-family="DejaVu Sans, Arial, sans-serif"
+     fill="#0f172a"
+     id="g82">
+    <text
+       x="800"
+       y="54"
+       font-size="34"
+       font-weight="700"
+       text-anchor="middle"
+       id="text1">Siamese-MicroPerf Architecture</text>
+    <text
+       x="800"
+       y="88"
+       font-size="18"
+       font-weight="500"
+       text-anchor="middle"
+       id="text16">(<tspan
+   font-style="italic"
+   id="tspan1">S</tspan><tspan
+   baseline-shift="sub"
+   font-size="70%"
+   id="tspan2">v1</tspan>, <tspan
+   font-style="italic"
+   id="tspan3">S</tspan><tspan
+   baseline-shift="sub"
+   font-size="70%"
+   id="tspan4">v2</tspan>) → <tspan
+   font-style="italic"
+   id="tspan5">f</tspan><tspan
+   baseline-shift="sub"
+   font-size="70%"
+   id="tspan6">θ</tspan> → Pool(·) → [<tspan
+   font-style="italic"
+   id="tspan7">V</tspan><tspan
+   baseline-shift="sub"
+   font-size="70%"
+   id="tspan8">v1</tspan>; <tspan
+   font-style="italic"
+   id="tspan9">V</tspan><tspan
+   baseline-shift="sub"
+   font-size="70%"
+   id="tspan10">v2</tspan>; <tspan
+   font-style="italic"
+   id="tspan11">V</tspan><tspan
+   baseline-shift="sub"
+   font-size="70%"
+   id="tspan12">v1</tspan> − <tspan
+   font-style="italic"
+   id="tspan13">V</tspan><tspan
+   baseline-shift="sub"
+   font-size="70%"
+   id="tspan14">v2</tspan>] → <tspan
+   font-style="italic"
+   id="tspan15">g</tspan><tspan
+   baseline-shift="sub"
+   font-size="70%"
+   id="tspan16">φ</tspan> → Ŷ</text>
+    <text
+       x="120"
+       y="122"
+       font-size="22"
+       font-weight="700"
+       id="text17">1. Paired Input Sequences</text>
+    <text
+       x="120"
+       y="152"
+       font-size="15"
+       font-weight="500"
+       fill="#475569"
+       id="text18">Same program, different versions encoded as aligned PMU/LBR tensors</text>
+    <rect
+       x="120"
+       y="180"
+       width="440"
+       height="110"
+       fill="#e8f1ff"
+       stroke="#2563eb"
+       stroke-width="2"
+       id="rect18" />
+    <rect
+       x="1040"
+       y="180"
+       width="440"
+       height="110"
+       fill="#e8f1ff"
+       stroke="#2563eb"
+       stroke-width="2"
+       id="rect19" />
+    <text
+       x="145"
+       y="220"
+       font-size="24"
+       font-weight="700"
+       id="text20"><tspan
+         font-style="italic"
+         id="tspan19">S</tspan><tspan
+         baseline-shift="sub"
+         font-size="70%"
+         id="tspan20">v1</tspan></text>
+    <text
+       x="145"
+       y="252"
+       font-size="17"
+       font-weight="500"
+       fill="#334155"
+       id="text21">PMU / LBR sequence for version v1</text>
+    <text
+       x="145"
+       y="278"
+       font-size="17"
+       font-weight="600"
+       fill="#334155"
+       id="text22"><tspan
+         font-style="italic"
+         id="tspan21">R</tspan><tspan
+         baseline-shift="super"
+         font-size="70%"
+         id="tspan22">T×D</tspan></text>
+    <text
+       x="1065"
+       y="220"
+       font-size="24"
+       font-weight="700"
+       id="text24"><tspan
+         font-style="italic"
+         id="tspan23">S</tspan><tspan
+         baseline-shift="sub"
+         font-size="70%"
+         id="tspan24">v2</tspan></text>
+    <text
+       x="1065"
+       y="252"
+       font-size="17"
+       font-weight="500"
+       fill="#334155"
+       id="text25">PMU / LBR sequence for version v2</text>
+    <text
+       x="1065"
+       y="278"
+       font-size="17"
+       font-weight="600"
+       fill="#334155"
+       id="text26"><tspan
+         font-style="italic"
+         id="tspan25">R</tspan><tspan
+         baseline-shift="super"
+         font-size="70%"
+         id="tspan26">T×D</tspan></text>
+    <text
+       x="120"
+       y="354"
+       font-size="22"
+       font-weight="700"
+       id="text28">2. Shared Encoder <tspan
+   font-style="italic"
+   id="tspan27">f</tspan><tspan
+   baseline-shift="sub"
+   font-size="70%"
+   id="tspan28">θ</tspan></text>
+    <text
+       x="120"
+       y="384"
+       font-size="15"
+       font-weight="500"
+       fill="#475569"
+       id="text29">Two branches share the same weights so their embeddings stay in one comparable feature space</text>
+    <rect
+       x="320"
+       y="410"
+       width="960"
+       height="220"
+       fill="#ecfdf3"
+       stroke="#16a34a"
+       stroke-width="2"
+       id="rect29" />
+    <text
+       x="350"
+       y="448"
+       font-size="24"
+       font-weight="700"
+       id="text30">Shared Encoder <tspan
+   font-style="italic"
+   id="tspan29">f</tspan><tspan
+   baseline-shift="sub"
+   font-size="70%"
+   id="tspan30">θ</tspan></text>
+    <text
+       x="800"
+       y="486"
+       font-size="18"
+       font-weight="600"
+       text-anchor="middle"
+       fill="#334155"
+       id="text31">same weights / same feature space</text>
+    <rect
+       x="380"
+       y="520"
+       width="220"
+       height="70"
+       fill="#ffffff"
+       stroke="#16a34a"
+       stroke-width="2"
+       id="rect31" />
+    <rect
+       x="690"
+       y="520"
+       width="220"
+       height="70"
+       fill="#ffffff"
+       stroke="#16a34a"
+       stroke-width="2"
+       id="rect32" />
+    <rect
+       x="1000"
+       y="520"
+       width="220"
+       height="70"
+       fill="#ffffff"
+       stroke="#16a34a"
+       stroke-width="2"
+       id="rect33" />
+    <text
+       x="490"
+       y="550"
+       font-size="22"
+       font-weight="700"
+       text-anchor="middle"
+       id="text33">CNN</text>
+    <text
+       x="490"
+       y="576"
+       font-size="15"
+       font-weight="500"
+       text-anchor="middle"
+       fill="#475569"
+       id="text34">local temporal motifs</text>
+    <text
+       x="800"
+       y="550"
+       font-size="22"
+       font-weight="700"
+       text-anchor="middle"
+       id="text35">BiLSTM</text>
+    <text
+       x="800"
+       y="576"
+       font-size="15"
+       font-weight="500"
+       text-anchor="middle"
+       fill="#475569"
+       id="text36">order-sensitive context</text>
+    <text
+       x="1110"
+       y="550"
+       font-size="22"
+       font-weight="700"
+       text-anchor="middle"
+       id="text37">Transformer</text>
+    <text
+       x="1110"
+       y="576"
+       font-size="15"
+       font-weight="500"
+       text-anchor="middle"
+       fill="#475569"
+       id="text38">long-range dependency</text>
+    <text
+       x="430"
+       y="670"
+       font-size="20"
+       font-weight="700"
+       text-anchor="middle"
+       id="text43"><tspan
+   font-style="italic"
+   id="tspan38">H</tspan><tspan
+   baseline-shift="sub"
+   font-size="70%"
+   id="tspan39">v1</tspan> = <tspan
+   font-style="italic"
+   id="tspan40">f</tspan><tspan
+   baseline-shift="sub"
+   font-size="70%"
+   id="tspan41">θ</tspan>(<tspan
+   font-style="italic"
+   id="tspan42">S</tspan><tspan
+   baseline-shift="sub"
+   font-size="70%"
+   id="tspan43">v1</tspan>)</text>
+    <text
+       x="1170"
+       y="670"
+       font-size="20"
+       font-weight="700"
+       text-anchor="middle"
+       id="text49"><tspan
+   font-style="italic"
+   id="tspan44">H</tspan><tspan
+   baseline-shift="sub"
+   font-size="70%"
+   id="tspan45">v2</tspan> = <tspan
+   font-style="italic"
+   id="tspan46">f</tspan><tspan
+   baseline-shift="sub"
+   font-size="70%"
+   id="tspan47">θ</tspan>(<tspan
+   font-style="italic"
+   id="tspan48">S</tspan><tspan
+   baseline-shift="sub"
+   font-size="70%"
+   id="tspan49">v2</tspan>)</text>
+    <text
+       x="120"
+       y="730"
+       font-size="22"
+       font-weight="700"
+       id="text50">3. Mask-aware Pooling</text>
+    <text
+       x="120"
+       y="760"
+       font-size="15"
+       font-weight="500"
+       fill="#475569"
+       id="text51">Compress hidden states into fixed-size summaries while ignoring padding</text>
+    <rect
+       x="220"
+       y="790"
+       width="420"
+       height="80"
+       fill="#fff7ed"
+       stroke="#ea580c"
+       stroke-width="2"
+       id="rect51" />
+    <rect
+       x="960"
+       y="790"
+       width="420"
+       height="80"
+       fill="#fff7ed"
+       stroke="#ea580c"
+       stroke-width="2"
+       id="rect52" />
+    <text
+       x="430"
+       y="824"
+       font-size="23"
+       font-weight="700"
+       text-anchor="middle"
+       id="text55">Pool(<tspan
+   font-style="italic"
+   id="tspan52">H</tspan><tspan
+   baseline-shift="sub"
+   font-size="70%"
+   id="tspan53">v1</tspan>) → <tspan
+   font-style="italic"
+   id="tspan54">V</tspan><tspan
+   baseline-shift="sub"
+   font-size="70%"
+   id="tspan55">v1</tspan></text>
+    <text
+       x="430"
+       y="850"
+       font-size="15"
+       font-weight="500"
+       text-anchor="middle"
+       fill="#475569"
+       id="text56">summary vector for version v1</text>
+    <text
+       x="1170"
+       y="824"
+       font-size="23"
+       font-weight="700"
+       text-anchor="middle"
+       id="text59">Pool(<tspan
+   font-style="italic"
+   id="tspan56">H</tspan><tspan
+   baseline-shift="sub"
+   font-size="70%"
+   id="tspan57">v2</tspan>) → <tspan
+   font-style="italic"
+   id="tspan58">V</tspan><tspan
+   baseline-shift="sub"
+   font-size="70%"
+   id="tspan59">v2</tspan></text>
+    <text
+       x="1170"
+       y="850"
+       font-size="15"
+       font-weight="500"
+       text-anchor="middle"
+       fill="#475569"
+       id="text60">summary vector for version v2</text>
+    <text
+       x="120"
+       y="934"
+       font-size="22"
+       font-weight="700"
+       id="text61">4. Explicit Contrast Fusion</text>
+    <text
+       x="120"
+       y="964"
+       font-size="15"
+       font-weight="500"
+       fill="#475569"
+       id="text62">Keep absolute states and the directional difference together before regression</text>
+    <rect
+       x="160"
+       y="990"
+       width="300"
+       height="86"
+       fill="#fef3c7"
+       stroke="#d97706"
+       stroke-width="2"
+       id="rect62" />
+    <rect
+       x="650"
+       y="990"
+       width="300"
+       height="86"
+       fill="#fef3c7"
+       stroke="#d97706"
+       stroke-width="2"
+       id="rect63" />
+    <rect
+       x="1140"
+       y="990"
+       width="300"
+       height="86"
+       fill="#fef3c7"
+       stroke="#d97706"
+       stroke-width="2"
+       id="rect64" />
+    <text
+       x="310"
+       y="1024"
+       font-size="22"
+       font-weight="700"
+       text-anchor="middle"
+       id="text65"><tspan
+         font-style="italic"
+         id="tspan64">V</tspan><tspan
+         baseline-shift="sub"
+         font-size="70%"
+         id="tspan65">v1</tspan></text>
+    <text
+       x="310"
+       y="1052"
+       font-size="15"
+       font-weight="500"
+       text-anchor="middle"
+       fill="#475569"
+       id="text66">absolute state</text>
+    <text
+       x="800"
+       y="1024"
+       font-size="22"
+       font-weight="700"
+       text-anchor="middle"
+       id="text69"><tspan
+   font-style="italic"
+   id="tspan66">V</tspan><tspan
+   baseline-shift="sub"
+   font-size="70%"
+   id="tspan67">v1</tspan> − <tspan
+   font-style="italic"
+   id="tspan68">V</tspan><tspan
+   baseline-shift="sub"
+   font-size="70%"
+   id="tspan69">v2</tspan></text>
+    <text
+       x="800"
+       y="1052"
+       font-size="15"
+       font-weight="500"
+       text-anchor="middle"
+       fill="#475569"
+       id="text70">directional delta</text>
+    <text
+       x="1290"
+       y="1024"
+       font-size="22"
+       font-weight="700"
+       text-anchor="middle"
+       id="text71"><tspan
+         font-style="italic"
+         id="tspan70">V</tspan><tspan
+         baseline-shift="sub"
+         font-size="70%"
+         id="tspan71">v2</tspan></text>
+    <text
+       x="1290"
+       y="1052"
+       font-size="15"
+       font-weight="500"
+       text-anchor="middle"
+       fill="#475569"
+       id="text72">absolute state</text>
+    <rect
+       x="430"
+       y="1120"
+       width="740"
+       height="90"
+       fill="#fef3c7"
+       stroke="#d97706"
+       stroke-width="2"
+       id="rect72" />
+    <text
+       x="800"
+       y="1160"
+       font-size="24"
+       font-weight="700"
+       text-anchor="middle"
+       id="text79">[<tspan
+   font-style="italic"
+   id="tspan72">V</tspan><tspan
+   baseline-shift="sub"
+   font-size="70%"
+   id="tspan73">v1</tspan>; <tspan
+   font-style="italic"
+   id="tspan74">V</tspan><tspan
+   baseline-shift="sub"
+   font-size="70%"
+   id="tspan75">v2</tspan>; <tspan
+   font-style="italic"
+   id="tspan76">V</tspan><tspan
+   baseline-shift="sub"
+   font-size="70%"
+   id="tspan77">v1</tspan> − <tspan
+   font-style="italic"
+   id="tspan78">V</tspan><tspan
+   baseline-shift="sub"
+   font-size="70%"
+   id="tspan79">v2</tspan>]</text>
+    <text
+       x="800"
+       y="1188"
+       font-size="15"
+       font-weight="500"
+       text-anchor="middle"
+       fill="#475569"
+       id="text80">explicit comparison interface</text>
+    <rect
+       x="620"
+       y="1240"
+       width="360"
+       height="80"
+       fill="#f3e8ff"
+       stroke="#9333ea"
+       stroke-width="2"
+       id="rect80" />
+    <text
+       x="800"
+       y="1288"
+       font-size="24"
+       font-weight="700"
+       text-anchor="middle"
+       id="text81"><tspan
+   font-style="italic"
+   id="tspan80">g</tspan><tspan
+   baseline-shift="sub"
+   font-size="70%"
+   id="tspan81">φ</tspan> (MLP)</text>
+    <rect
+       x="620"
+       y="1350"
+       width="360"
+       height="70"
+       fill="#fee2e2"
+       stroke="#dc2626"
+       stroke-width="2"
+       id="rect81" />
+    <text
+       x="800"
+       y="1392"
+       font-size="24"
+       font-weight="700"
+       text-anchor="middle"
+       id="text82">Ŷ</text>
+  </g>
+  <g
+     stroke="#64748b"
+     stroke-width="3"
+     fill="none"
+     id="g91">
+    <polyline
+       points="340,290 340,340 620,340 620,410"
+       id="polyline82" />
+    <polyline
+       points="1260,290 1260,340 980,340 980,410"
+       id="polyline83" />
+    <polyline
+       points="620,630 620,700 430,700 430,790"
+       id="polyline84" />
+    <polyline
+       points="980,630 980,700 1170,700 1170,790"
+       id="polyline85" />
+    <line
+       x1="430"
+       y1="870"
+       x2="430"
+       y2="990"
+       id="line85" />
+    <line
+       x1="1170"
+       y1="870"
+       x2="1170"
+       y2="990"
+       id="line86" />
+    <line
+       x1="460"
+       y1="1033"
+       x2="650"
+       y2="1033"
+       id="line87" />
+    <line
+       x1="1140"
+       y1="1033"
+       x2="950"
+       y2="1033"
+       id="line88" />
+    <polyline
+       points="310,1076 310,1100 620,1100 620,1120"
+       id="polyline88" />
+    <line
+       x1="800"
+       y1="1076"
+       x2="800"
+       y2="1120"
+       id="line89" />
+    <polyline
+       points="1290,1076 1290,1100 980,1100 980,1120"
+       id="polyline89" />
+    <line
+       x1="800"
+       y1="1210"
+       x2="800"
+       y2="1240"
+       id="line90" />
+    <line
+       x1="800"
+       y1="1320"
+       x2="800"
+       y2="1350"
+       id="line91" />
+  </g>
+  <g
+     fill="#64748b"
+     stroke="none"
+     id="g103">
+    <polygon
+       points="620,410 614,398 626,398"
+       id="polygon91" />
+    <polygon
+       points="980,410 974,398 986,398"
+       id="polygon92" />
+    <polygon
+       points="430,790 424,778 436,778"
+       id="polygon93" />
+    <polygon
+       points="1170,790 1164,778 1176,778"
+       id="polygon94" />
+    <polygon
+       points="430,990 424,978 436,978"
+       id="polygon95" />
+    <polygon
+       points="1170,990 1164,978 1176,978"
+       id="polygon96" />
+    <polygon
+       points="650,1033 638,1027 638,1039"
+       id="polygon97" />
+    <polygon
+       points="950,1033 962,1027 962,1039"
+       id="polygon98" />
+    <polygon
+       points="620,1120 614,1108 626,1108"
+       id="polygon99" />
+    <polygon
+       points="800,1120 794,1108 806,1108"
+       id="polygon100" />
+    <polygon
+       points="980,1120 974,1108 986,1108"
+       id="polygon101" />
+    <polygon
+       points="800,1240 794,1228 806,1228"
+       id="polygon102" />
+    <polygon
+       points="800,1350 794,1338 806,1338"
+       id="polygon103" />
+  </g>
+</svg>

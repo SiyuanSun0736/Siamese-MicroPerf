@@ -1,0 +1,58 @@
+flowchart TB
+    classDef input fill:#E8F1FF,stroke:#2563EB,stroke-width:1.5px,color:#0F172A;
+    classDef encoder fill:#ECFDF3,stroke:#16A34A,stroke-width:1.5px,color:#14532D;
+    classDef pool fill:#FFF7ED,stroke:#EA580C,stroke-width:1.5px,color:#7C2D12;
+    classDef fusion fill:#FEF3C7,stroke:#D97706,stroke-width:1.5px,color:#78350F;
+    classDef head fill:#F3E8FF,stroke:#9333EA,stroke-width:1.5px,color:#581C87;
+    classDef output fill:#FEE2E2,stroke:#DC2626,stroke-width:1.5px,color:#7F1D1D;
+
+    subgraph IN[Paired Input Sequences]
+        S1["S_v1\nPMU/LBR sequence\nR^(T x D)"]:::input
+        S2["S_v2\nPMU/LBR sequence\nR^(T x D)"]:::input
+    end
+
+    subgraph ENC[Shared Encoder f_theta]
+        E0["Same weights\nsame feature space"]:::encoder
+        E1["CNN backbone\nlocal temporal motifs"]:::encoder
+        E2["BiLSTM backbone\ncontextual order modeling"]:::encoder
+        E3["Transformer backbone\nlong-range dependency modeling"]:::encoder
+    end
+
+    subgraph POOL[Mask-aware Pooling]
+        P1["Pool(H_v1) -> V_v1"]:::pool
+        P2["Pool(H_v2) -> V_v2"]:::pool
+    end
+
+    subgraph FUSE[Explicit Contrast Fusion]
+        F1["Absolute state\nV_v1"]:::fusion
+        F2["Absolute state\nV_v2"]:::fusion
+        F3["Directional delta\nV_v1 - V_v2"]:::fusion
+        Z["Concatenate\n[V_v1; V_v2; V_v1 - V_v2]"]:::fusion
+    end
+
+    subgraph HEAD[Regression Head g_phi]
+        MLP["MLP regressor"]:::head
+    end
+
+    Y["Y_hat\nrelative performance ratio"]:::output
+
+    S1 --> E0
+    S2 --> E0
+    E0 --> E1
+    E0 --> E2
+    E0 --> E3
+    E1 -. selectable .-> P1
+    E1 -. selectable .-> P2
+    E2 -. selectable .-> P1
+    E2 -. selectable .-> P2
+    E3 -. selectable .-> P1
+    E3 -. selectable .-> P2
+    P1 --> F1
+    P2 --> F2
+    F1 --> F3
+    F2 --> F3
+    F1 --> Z
+    F2 --> Z
+    F3 --> Z
+    Z --> MLP
+    MLP --> Y

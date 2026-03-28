@@ -1,0 +1,31 @@
+flowchart TB
+    subgraph U[User Space]
+        PERF[perf CLI\nstat / record / report]
+        PMU[pmu_monitor\ncustom C collector]
+        APP[Python feature pipeline]
+    end
+
+    subgraph K[Kernel]
+        PE[perf_event subsystem\nperf_event_open / read / mmap]
+        BPF[eBPF programs\noptional filtering / aggregation]
+        PROC[proc connector\nthread lifecycle events]
+    end
+
+    subgraph H[Event Sources]
+        PMUHW[PMU counters\ninst_retired / branch_misses / iTLB]
+        LBR[LBR branch stack\nrecent branch history]
+        TP[tracepoints / sched events]
+    end
+
+    PERF --> PE
+    PMU --> PE
+    PMU --> PROC
+    APP --> PMU
+
+    PE --> PMUHW
+    PE --> LBR
+
+    BPF -. attach .-> PE
+    BPF -. attach .-> TP
+
+    PROC --> PMU

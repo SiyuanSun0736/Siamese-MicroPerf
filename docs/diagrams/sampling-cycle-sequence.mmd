@@ -1,0 +1,23 @@
+sequenceDiagram
+    participant T as timerfd
+    participant M as pmu_monitor
+    participant P as pmu_counters
+    participant L as lbr ring buffer
+    participant O as CSV output
+    participant Y as Python feature pipeline
+
+    T->>M: tick every interval_ms
+    M->>M: poll() wakeup and compute elapsed_ms
+    M->>P: pmu_read()
+    P-->>M: delta counters + multiplex scaling
+    M->>L: lbr_drain()
+    L-->>M: sample_count / avg_span
+    M->>M: output_compute_lbr()
+    M->>O: output_csv_row()
+    O-->>M: append one CSV row
+    M->>Y: later load CSV rows
+    Y->>Y: drop inst=0 rows
+    Y->>Y: convert 5 counters to MPKI
+    Y->>Y: read lbr_log1p_span
+    Y->>Y: pad/truncate and apply Z-score
+    Y-->>M: tensors X_v1 / X_v2 / Y

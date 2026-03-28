@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+  <title id="title">perf CLI, perf_event API and eBPF layering</title>
+  <desc id="desc">A layered diagram showing user-space tools, the Linux perf_event subsystem and optional eBPF programs, and the underlying hardware and kernel event sources used by Siamese-MicroPerf.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f6f2e8; }
+      .panel-user { fill: #efe4cc; stroke: #715b2b; stroke-width: 2; rx: 18; }
+      .panel-kernel { fill: #dfe9dc; stroke: #42603d; stroke-width: 2; rx: 18; }
+      .panel-src { fill: #dde8ee; stroke: #35586b; stroke-width: 2; rx: 18; }
+      .box-user { fill: #fffaf0; stroke: #715b2b; stroke-width: 2; rx: 12; }
+      .box-kernel { fill: #f4faf2; stroke: #42603d; stroke-width: 2; rx: 12; }
+      .box-src { fill: #f5fbfe; stroke: #35586b; stroke-width: 2; rx: 12; }
+      .title { font: 700 28px 'DejaVu Sans', sans-serif; fill: #1f2933; }
+      .subtitle { font: 500 15px 'DejaVu Sans', sans-serif; fill: #405261; }
+      .panel-label { font: 700 20px 'DejaVu Sans', sans-serif; fill: #1f2933; }
+      .box-title { font: 700 18px 'DejaVu Sans', sans-serif; fill: #14212b; }
+      .box-text { font: 500 15px 'DejaVu Sans', sans-serif; fill: #243746; }
+      .note { font: 600 15px 'DejaVu Sans', sans-serif; fill: #5c4b1c; }
+      .arrow { stroke: #2f3d47; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+      .dashed { stroke-dasharray: 8 6; }
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2f3d47" />
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1200" height="760" />
+  <text class="title" x="60" y="55">Siamese-MicroPerf data collection stack</text>
+  <text class="subtitle" x="60" y="83">Where perf CLI, perf_event API and eBPF sit relative to pmu_monitor, PMU counters and LBR</text>
+
+  <rect class="panel-user" x="50" y="115" width="1100" height="150" />
+  <text class="panel-label" x="75" y="145">User Space</text>
+
+  <rect class="box-user" x="90" y="165" width="270" height="75" />
+  <text class="box-title" x="115" y="194">perf CLI</text>
+  <text class="box-text" x="115" y="218">perf stat / perf record / perf report</text>
+
+  <rect class="box-user" x="465" y="165" width="270" height="75" />
+  <text class="box-title" x="490" y="194">pmu_monitor</text>
+  <text class="box-text" x="490" y="218">custom C collector for fixed-step CSV output</text>
+
+  <rect class="box-user" x="840" y="165" width="270" height="75" />
+  <text class="box-title" x="865" y="194">Python pipeline</text>
+  <text class="box-text" x="865" y="218">MPKI, LBR serialization, Z-score</text>
+
+  <rect class="panel-kernel" x="50" y="305" width="1100" height="210" />
+  <text class="panel-label" x="75" y="335">Kernel</text>
+
+  <rect class="box-kernel" x="120" y="360" width="360" height="105" />
+  <text class="box-title" x="145" y="390">perf_event subsystem</text>
+  <text class="box-text" x="145" y="416">perf_event_open, read, mmap ring buffer</text>
+  <text class="box-text" x="145" y="439">time_enabled / time_running multiplexing data</text>
+
+  <rect class="box-kernel" x="520" y="360" width="280" height="105" />
+  <text class="box-title" x="545" y="390">eBPF programs</text>
+  <text class="box-text" x="545" y="416">optional in-kernel filtering / aggregation</text>
+  <text class="box-text" x="545" y="439">not used by pmu_monitor today</text>
+
+  <rect class="box-kernel" x="840" y="360" width="250" height="105" />
+  <text class="box-title" x="865" y="390">proc connector</text>
+  <text class="box-text" x="865" y="416">thread lifecycle events</text>
+  <text class="box-text" x="865" y="439">used by -T thread tracking</text>
+
+  <rect class="panel-src" x="50" y="555" width="1100" height="150" />
+  <text class="panel-label" x="75" y="585">Event Sources</text>
+
+  <rect class="box-src" x="100" y="605" width="300" height="70" />
+  <text class="box-title" x="125" y="634">PMU counters</text>
+  <text class="box-text" x="125" y="657">inst_retired, branch misses, iTLB, icache</text>
+
+  <rect class="box-src" x="450" y="605" width="300" height="70" />
+  <text class="box-title" x="475" y="634">LBR branch stack</text>
+  <text class="box-text" x="475" y="657">recent branch history sampled via perf_event</text>
+
+  <rect class="box-src" x="800" y="605" width="300" height="70" />
+  <text class="box-title" x="825" y="634">Tracepoints and sched events</text>
+  <text class="box-text" x="825" y="657">optional hooks for eBPF-based analysis</text>
+
+  <path class="arrow" d="M 225 240 L 225 360" />
+  <path class="arrow" d="M 600 240 L 600 360" />
+  <path class="arrow" d="M 975 240 L 975 360" />
+  <path class="arrow" d="M 965 465 L 965 605" />
+  <path class="arrow" d="M 300 465 L 250 605" />
+  <path class="arrow" d="M 330 465 L 600 605" />
+  <path class="arrow dashed" d="M 660 465 L 660 605" />
+  <path class="arrow dashed" d="M 690 465 L 950 605" />
+  <path class="arrow" d="M 735 202 L 840 202" />
+
+  <text class="note" x="748" y="195">CSV feeds tensors</text>
+  <text class="note" x="685" y="585">optional attach path</text>
+  <text class="note" x="871" y="538">-T listens here</text>
+</svg>

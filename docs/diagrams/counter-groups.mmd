@@ -1,0 +1,18 @@
+flowchart LR
+    subgraph A[Group A]
+        A0[Leader: inst_retired.any]
+        A1[L1-icache-load-misses]
+        A2[iTLB-loads]
+        A3[iTLB-load-misses]
+    end
+
+    subgraph B[Group B]
+        B0[Leader: branch-instructions]
+        B1[branch-misses]
+    end
+
+    A --> O1[MPKI features\nicache_miss_mpki\nitlb_load_mpki\nitlb_miss_mpki]
+    B --> O2[Branch MPKI features\nbranch_inst_mpki\nbranch_miss_mpki]
+
+    N[Shared time_enabled/time_running\nwithin each group] --> A
+    N --> B

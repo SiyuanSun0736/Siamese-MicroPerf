@@ -1,0 +1,410 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="1280"
+   height="900"
+   viewBox="0 0 1280 900"
+   role="img"
+   aria-labelledby="title desc"
+   version="1.1"
+   id="svg32"
+   sodipodi:docname="sampling-cycle-sequence.svg"
+   inkscape:version="1.4.3 (0d15f75042, 2025-12-25)"
+   inkscape:export-filename="/home/ssy/Pictures/sampling-cycle-sequence.png"
+   inkscape:export-xdpi="96"
+   inkscape:export-ydpi="96"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview32"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="0.88666667"
+     inkscape:cx="741.54135"
+     inkscape:cy="430.82707"
+     inkscape:window-width="1920"
+     inkscape:window-height="1006"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg32" />
+  <title
+     id="title">Sampling cycle sequence from pmu_monitor to feature engineering</title>
+  <desc
+     id="desc">A sequence diagram showing one sampling tick: timerfd wakes pmu_monitor, PMU counters are read, LBR is drained, a CSV row is written, and later the Python pipeline converts rows into MPKI and normalized tensors.</desc>
+  <defs
+     id="defs2">
+    <style
+       id="style1">
+      .bg { fill: #f7f3ea; }
+      .title { font: 700 30px 'DejaVu Sans', sans-serif; fill: #1e2a33; }
+      .subtitle { font: 500 16px 'DejaVu Sans', sans-serif; fill: #4e6170; }
+      .actor { fill: #fffdf8; stroke: #556974; stroke-width: 2; rx: 10; }
+      .actor-text { font: 700 18px 'DejaVu Sans', sans-serif; fill: #17232d; text-anchor: middle; }
+      .lifeline { stroke: #8ca0ab; stroke-width: 2; stroke-dasharray: 8 8; }
+      .msg { stroke: #2f4652; stroke-width: 2.4; fill: none; marker-end: url(#arrow); }
+      .ret { stroke: #6a7e89; stroke-width: 2; fill: none; stroke-dasharray: 8 6; marker-end: url(#arrowLight); }
+      .label { font: 600 15px 'DejaVu Sans', sans-serif; fill: #20303c; }
+      .note { fill: #efe3bf; stroke: #8a6e2a; stroke-width: 1.5; rx: 10; }
+      .note-text { font: 600 14px 'DejaVu Sans', sans-serif; fill: #5b4818; }
+      .phase { fill: #dfe9dc; stroke: #42603d; stroke-width: 1.5; rx: 12; }
+      .phase-text { font: 700 16px 'DejaVu Sans', sans-serif; fill: #274027; }
+    </style>
+    <marker
+       id="arrow"
+       markerWidth="10"
+       markerHeight="10"
+       refX="8"
+       refY="5"
+       orient="auto">
+      <path
+         d="M 0 0 L 10 5 L 0 10 z"
+         fill="#2f4652"
+         id="path1" />
+    </marker>
+    <marker
+       id="arrowLight"
+       markerWidth="10"
+       markerHeight="10"
+       refX="8"
+       refY="5"
+       orient="auto">
+      <path
+         d="M 0 0 L 10 5 L 0 10 z"
+         fill="#6a7e89"
+         id="path2" />
+    </marker>
+  </defs>
+  <rect
+     class="bg"
+     x="0"
+     y="0"
+     width="1280"
+     height="900"
+     id="rect2" />
+  <text
+     class="title"
+     x="60"
+     y="55"
+     id="text2">One sampling cycle: pmu_monitor to tensors</text>
+  <text
+     class="subtitle"
+     x="60"
+     y="84"
+     id="text3">A fixed-interval timer tick triggers PMU reads, LBR aggregation, CSV output, and later Python-side MPKI and Z-score processing</text>
+  <rect
+     class="phase"
+     x="70.809929"
+     y="110.02047"
+     width="570.41028"
+     height="41.959095"
+     id="rect3" />
+  <text
+     class="phase-text"
+     x="80"
+     y="137"
+     id="text4">C-side fixed-step collection</text>
+  <rect
+     class="phase"
+     x="699.60852"
+     y="109.98441"
+     width="541.34692"
+     height="42.031189"
+     id="rect4" />
+  <text
+     class="phase-text"
+     x="709.9624"
+     y="137"
+     id="text5"
+     style="font-style:normal;font-variant:normal;font-weight:700;font-stretch:normal;font-size:16px;line-height:normal;font-family:'DejaVu Sans', sans-serif">Python-side feature engineering</text>
+  <rect
+     class="actor"
+     x="70"
+     y="175"
+     width="140"
+     height="54"
+     id="rect5" />
+  <text
+     class="actor-text"
+     x="140"
+     y="208"
+     id="text6">timerfd</text>
+  <line
+     class="lifeline"
+     x1="140"
+     y1="229"
+     x2="140"
+     y2="840"
+     id="line6" />
+  <rect
+     class="actor"
+     x="250"
+     y="175"
+     width="160"
+     height="54"
+     id="rect6" />
+  <text
+     class="actor-text"
+     x="330"
+     y="208"
+     id="text7">pmu_monitor</text>
+  <line
+     class="lifeline"
+     x1="330"
+     y1="229"
+     x2="330"
+     y2="840"
+     id="line7" />
+  <rect
+     class="actor"
+     x="470"
+     y="175"
+     width="170"
+     height="54"
+     id="rect7" />
+  <text
+     class="actor-text"
+     x="555"
+     y="208"
+     id="text8">pmu_counters</text>
+  <line
+     class="lifeline"
+     x1="555"
+     y1="229"
+     x2="555"
+     y2="840"
+     id="line8" />
+  <rect
+     class="actor"
+     x="700"
+     y="175"
+     width="170"
+     height="54"
+     id="rect8" />
+  <text
+     class="actor-text"
+     x="785"
+     y="208"
+     id="text9">LBR buffer</text>
+  <line
+     class="lifeline"
+     x1="785"
+     y1="229"
+     x2="785"
+     y2="840"
+     id="line9" />
+  <rect
+     class="actor"
+     x="930"
+     y="175"
+     width="140"
+     height="54"
+     id="rect9" />
+  <text
+     class="actor-text"
+     x="1000"
+     y="208"
+     id="text10">CSV file</text>
+  <line
+     class="lifeline"
+     x1="1000"
+     y1="229"
+     x2="1000"
+     y2="840"
+     id="line10" />
+  <rect
+     class="actor"
+     x="1100"
+     y="175"
+     width="140"
+     height="54"
+     id="rect10" />
+  <text
+     class="actor-text"
+     x="1170"
+     y="208"
+     id="text11">Python</text>
+  <line
+     class="lifeline"
+     x1="1170"
+     y1="229"
+     x2="1170"
+     y2="840"
+     id="line11" />
+  <path
+     class="msg"
+     d="M 140 280 L 322 280"
+     id="path11" />
+  <text
+     class="label"
+     x="148.0376"
+     y="266.87219"
+     id="text12"
+     style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:15px;line-height:normal;font-family:'DejaVu Sans', sans-serif">tick every interval_ms</text>
+  <path
+     class="msg"
+     d="M 330 330 L 547 330"
+     id="path12" />
+  <text
+     class="label"
+     x="390"
+     y="318"
+     id="text13">pmu_read()</text>
+  <path
+     class="ret"
+     d="M 555 370 L 338 370"
+     id="path13" />
+  <text
+     class="label"
+     x="344.26529"
+     y="358"
+     id="text14"
+     style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:15px;line-height:normal;font-family:'DejaVu Sans', sans-serif">delta counters + time_enabled/time_running scaling</text>
+  <path
+     class="msg"
+     d="M 330 425 L 777 425"
+     id="path14" />
+  <text
+     class="label"
+     x="466.90421"
+     y="416.18994"
+     id="text15"
+     style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:15px;line-height:normal;font-family:'DejaVu Sans', sans-serif">lbr_drain()</text>
+  <path
+     class="ret"
+     d="M 785 465 L 338 465"
+     id="path15" />
+  <text
+     class="label"
+     x="425"
+     y="453"
+     id="text16">sample_count, avg_span</text>
+  <path
+     class="msg"
+     d="M 330 515 L 330 555"
+     id="path16" />
+  <text
+     class="label"
+     x="345"
+     y="540"
+     id="text17">output_compute_lbr()</text>
+  <path
+     class="msg"
+     d="M 330 605 L 992 605"
+     id="path17" />
+  <text
+     class="label"
+     x="498.35156"
+     y="594.59497"
+     id="text18"
+     style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:15px;line-height:normal;font-family:'DejaVu Sans', sans-serif">output_csv_row(elapsed_ms, counters, lbr_log1p_span)</text>
+  <path
+     class="ret"
+     d="M 1000 645 L 338 645"
+     id="path18" />
+  <text
+     class="label"
+     x="580.27625"
+     y="634.59497"
+     id="text19"
+     style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:15px;line-height:normal;font-family:'DejaVu Sans', sans-serif">append one time-step row</text>
+  <path
+     class="msg"
+     d="M 1008 720 L 1162 720"
+     id="path19" />
+  <text
+     class="label"
+     x="1036.4176"
+     y="708.79749"
+     id="text20"
+     style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:15px;line-height:normal;font-family:'DejaVu Sans', sans-serif">load CSV later</text>
+  <path
+     class="msg"
+     d="M 1170 760 L 1170 790"
+     id="path20" />
+  <text
+     class="label"
+     x="1033.6671"
+     y="768.55731"
+     id="text21"
+     style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:15px;line-height:normal;font-family:'DejaVu Sans', sans-serif">drop inst=0 rows</text>
+  <path
+     class="msg"
+     d="M 1170 805 L 1170 835"
+     id="path21" />
+  <text
+     class="label"
+     x="1000.9575"
+     y="812.75983"
+     id="text22"
+     style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:15px;line-height:normal;font-family:'DejaVu Sans', sans-serif">MPKI, LBR, pad, Z-score</text>
+  <g
+     id="g33">
+    <rect
+       class="note"
+       x="36.165386"
+       y="494.28571"
+       width="270"
+       height="82"
+       id="rect25" />
+    <text
+       class="note-text"
+       x="37.30077"
+       y="516.64667"
+       id="text26"
+       style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:14px;line-height:normal;font-family:'DejaVu Sans', sans-serif">LBR is aggregated before leaving C space.</text>
+    <text
+       class="note-text"
+       x="58.165386"
+       y="539.5188"
+       id="text27"
+       style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:14px;line-height:normal;font-family:'DejaVu Sans', sans-serif">The CSV stores lbr_avg_span and</text>
+    <text
+       class="note-text"
+       x="51.398479"
+       y="560.13531"
+       id="text28"
+       style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:14px;line-height:normal;font-family:'DejaVu Sans', sans-serif">lbr_log1p_span, not raw branch stacks.</text>
+  </g>
+  <g
+     id="g34"
+     transform="translate(-19.172938,42.293233)">
+    <rect
+       class="note"
+       x="1034.9636"
+       y="499.96359"
+       width="195.07281"
+       height="95.92244"
+       id="rect28" />
+    <text
+       class="note-text"
+       x="1042.355"
+       y="519.26776"
+       id="text29"
+       style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:14px;line-height:normal;font-family:'DejaVu Sans', sans-serif">Python converts</text>
+    <text
+       class="note-text"
+       x="1041.7744"
+       y="541.84961"
+       id="text30"
+       style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:14px;line-height:normal;font-family:'DejaVu Sans', sans-serif">5 PMU columns to MPKI,</text>
+    <text
+       class="note-text"
+       x="1041.2106"
+       y="563.03009"
+       id="text31"
+       style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:14px;line-height:normal;font-family:'DejaVu Sans', sans-serif">keeps LBR as the 6th feature,</text>
+    <text
+       class="note-text"
+       x="1041.7744"
+       y="584.77441"
+       id="text32"
+       style="font-style:normal;font-variant:normal;font-weight:600;font-stretch:normal;font-size:14px;line-height:normal;font-family:'DejaVu Sans', sans-serif">then normalizes valid steps.</text>
+  </g>
+</svg>

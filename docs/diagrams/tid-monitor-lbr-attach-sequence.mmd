@@ -1,0 +1,22 @@
+sequenceDiagram
+    participant W as workload thread tree
+    participant K as kernel proc connector
+    participant N as tid_monitor
+    participant M as pmu_monitor callback
+    participant L as lbr slot manager
+    participant D as next lbr_drain()
+
+    W->>K: clone() or fork() creates new TID
+    K-->>N: PROC_EVENT_FORK / child_tid
+    N->>N: tracked_contains(parent_tid or parent_tgid)
+    N->>M: on_tid_born(child_tid)
+    M->>L: lbr_add_tid(child_tid)
+    L->>L: open perf_event + mmap ring buffer
+    L-->>M: new LBR slot active
+    M-->>N: return
+    D->>L: iterate active slots
+    L-->>D: child thread branch samples included
+    W->>K: thread exit
+    K-->>N: PROC_EVENT_EXIT / tid
+    N->>M: on_tid_dead(tid)
+    M->>L: lbr_remove_tid(tid)
