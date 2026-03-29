@@ -60,10 +60,11 @@ from build_dataset_fixedtime import extract_features  # noqa: E402
 
 def load_model(checkpoint_path: Path, device: torch.device,
                model_name: str, model_kwargs: dict):
-    """加载训练好的模型。"""
+    """加载训练好的模型。返回 (model, model_name, model_kwargs, log_target)。"""
     ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
     checkpoint_model_name = ckpt.get("model_name")
     checkpoint_model_kwargs = ckpt.get("model_kwargs")
+    log_target = ckpt.get("log_target", False)
 
     if model_name == "auto":
         model_name = checkpoint_model_name or "cnn"
@@ -78,7 +79,7 @@ def load_model(checkpoint_path: Path, device: torch.device,
     model = build_model(model_name, **model_kwargs).to(device)
     model.load_state_dict(ckpt["model_state_dict"])
     model.eval()
-    return model, model_name, model_kwargs
+    return model, model_name, model_kwargs, log_target
 
 
 def judge(y_hat: float, v1_name: str = "v1", v2_name: str = "v2") -> str:
@@ -109,7 +110,8 @@ def resolve_label_mode(stats: dict | None) -> tuple[str, str]:
 # ── 张量模式推理 ──────────────────────────────────────────────────────────────
 
 @torch.no_grad()
-def infer_from_tensors(model, tensor_dir: Path, device: torch.device):
+def infer_from_tensors(model, tensor_dir: Path, device: torch.device,
+                      log_target: bool = False):
     """对已有张量做批量推理，输出逐样本结果。"""
     X_v1 = torch.load(tensor_dir / "X_v1.pt", weights_only=True).to(device)
     X_v2 = torch.load(tensor_dir / "X_v2.pt", weights_only=True).to(device)
@@ -145,6 +147,12 @@ def infer_from_tensors(model, tensor_dir: Path, device: torch.device):
 
     # 批量前向
     Y_hat = model(X_v1, X_v2, len_v1, len_v2).cpu()
+
+    # 若模型在 log 空间训练，将预测值转回 ratio 空间
+    if log_target:
+        Y_hat = torch.exp(Y_hat)
+        logging.getLogger(__name__).info("已应用 exp() 变换（log-target 模式）")
+
     N = Y_hat.shape[0]
 
     return Y_hat, Y, programs, v1_name, v2_name, mechanism, label_semantics
@@ -222,7 +230,8 @@ def print_results(Y_hat, Y, programs, v1_name, v2_name,
 
 @torch.no_grad()
 def infer_from_csv(model, csv_v1: Path, csv_v2: Path,
-                   stats_path: Path, device: torch.device):
+                   stats_path: Path, device: torch.device,
+                   log_target: bool = False):
     """对两个原始 PMU CSV 执行实时特征工程并推理。"""
     stats = json.loads(stats_path.read_text())
     seq_len = stats.get("seq_len", stats.get("max_seq_len"))
@@ -255,6 +264,9 @@ def infer_from_csv(model, csv_v1: Path, csv_v2: Path,
     lv2 = torch.tensor([vlen2], dtype=torch.long, device=device)
 
     y_hat = model(x1, x2, lv1, lv2).item()
+    if log_target:
+        import math
+        y_hat = math.exp(y_hat)
     verdict = judge(y_hat, v1_name, v2_name)
 
     logging.info("%s", "=" * 60)
@@ -352,7 +364,7 @@ def main():
         in_features=args.in_features,
         args=args,
     )
-    model, resolved_model_name, resolved_model_kwargs = load_model(
+    model, resolved_model_name, resolved_model_kwargs, log_target = load_model(
         args.checkpoint,
         device,
         model_name=args.model,
@@ -361,13 +373,16 @@ def main():
     logging.getLogger(__name__).info("模型加载完成: %s  (设备: %s)", args.checkpoint, device)
     logging.getLogger(__name__).info("模型类型: %s", resolved_model_name)
     logging.getLogger(__name__).info("模型参数: %s", resolved_model_kwargs)
+    if log_target:
+        logging.getLogger(__name__).info("log-target 模式: 推理时将自动应用 exp() 变换")
 
     # ── CSV 模式 ──
     if args.csv_v1 and args.csv_v2:
         if not args.stats:
             logging.error("CSV 模式需要 --stats 参数")
             sys.exit(1)
-        infer_from_csv(model, args.csv_v1, args.csv_v2, args.stats, device)
+        infer_from_csv(model, args.csv_v1, args.csv_v2, args.stats, device,
+                       log_target=log_target)
         return
 
     # ── 张量模式 ──
@@ -384,7 +399,7 @@ def main():
             logging.getLogger(__name__).warning("跳过不存在的目录: %s", d)
             continue
         Y_hat, Y, programs, v1_name, v2_name, mechanism, label_semantics = \
-            infer_from_tensors(model, d, device)
+            infer_from_tensors(model, d, device, log_target=log_target)
         print_results(Y_hat, Y, programs, v1_name, v2_name,
                       mechanism, label_semantics, pair)
 

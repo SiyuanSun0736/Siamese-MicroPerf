@@ -133,11 +133,45 @@ def train_val_split(X_v1, X_v2, Y, len_v1, len_v2, val_ratio=0.2, seed=42):
     )
 
 
+# ── 数据增强 ─────────────────────────────────────────────────────────────────
+
+def augment_pair_swap(X_v1, X_v2, Y, len_v1, len_v2, log_target: bool):
+    """对称增强：添加 (v2, v1) 反转对，在 log 空间下标签取反，在原始空间下标签取倒数。
+
+    将数据量翻倍，并让模型学到反对称性质。"""
+    if log_target:
+        Y_swap = -Y  # log(1/r) = -log(r)
+    else:
+        Y_swap = 1.0 / Y
+    return (
+        torch.cat([X_v1, X_v2]),
+        torch.cat([X_v2, X_v1]),
+        torch.cat([Y, Y_swap]),
+        torch.cat([len_v1, len_v2]),
+        torch.cat([len_v2, len_v1]),
+    )
+
+
 # ── 训练循环 ──────────────────────────────────────────────────────────────────
+
+def direction_loss_fn(y_hat: torch.Tensor, y: torch.Tensor,
+                      threshold: float = 0.0) -> torch.Tensor:
+    """方向感知损失：当预测值与真实值在决策边界两侧时施加惩罚。
+
+    使用 ReLU 确保正确方向的样本零惩罚（softplus 有 ln2 基线开销）。
+    在 log 空间下，边界为 0；在原始空间下，边界为 1.0。
+    """
+    # 当 y_hat 和 y 符号相同 → 乘积为正 → margin 为负 → ReLU=0
+    # 当符号不同 → 乘积为负 → margin 为正 → 产生惩罚
+    margin = -(y_hat - threshold) * (y - threshold)
+    return torch.relu(margin).mean()
+
 
 def train_one_epoch(model, loader, criterion, optimizer, device,
                     max_grad_norm: float = 1.0,
-                    noise_std: float = 0.0):
+                    noise_std: float = 0.0,
+                    direction_lambda: float = 0.0,
+                    log_target: bool = False):
     model.train()
     total_loss = 0.0
     n = 0
@@ -153,6 +187,13 @@ def train_one_epoch(model, loader, criterion, optimizer, device,
         optimizer.zero_grad()
         y_hat = model(x1, x2, lv1, lv2)
         loss = criterion(y_hat, y)
+
+        # 方向感知辅助损失
+        if direction_lambda > 0:
+            threshold = 0.0 if log_target else 1.0
+            dir_loss = direction_loss_fn(y_hat, y, threshold=threshold)
+            loss = loss + direction_lambda * dir_loss
+
         loss.backward()
 
         # 梯度裁剪：防止梯度爆炸
@@ -243,6 +284,15 @@ def main():
         "--warmup-epochs", type=int, default=10,
         help="学习率线性预热轮数")
     parser.add_argument(
+        "--log-target", action="store_true", default=False,
+        help="将标签 Y 转为 log(Y) 进行训练（决策边界对称化）")
+    parser.add_argument(
+        "--direction-lambda", type=float, default=0.0,
+        help="方向感知辅助损失权重（0 表示禁用）")
+    parser.add_argument(
+        "--pair-swap", action="store_true", default=False,
+        help="对称增强：添加 (v2,v1) 反转对，数据翻倍")
+    parser.add_argument(
         "--model", "--arch", dest="model",
         choices=MODEL_CHOICES, default="cnn",
         help="模型类型")
@@ -323,6 +373,18 @@ def main():
         train_val_split(X_v1, X_v2, Y, len_v1, len_v2,
                         val_ratio=args.val_ratio, seed=args.seed)
 
+    # ── Log-target 变换 ──
+    if args.log_target:
+        Y_tr = torch.log(Y_tr)
+        Y_val = torch.log(Y_val)
+        logging.getLogger(__name__).info("已启用 log-target 变换: Y → log(Y)")
+
+    # ── 对称增强: pair-swap ──
+    if args.pair_swap:
+        X_v1_tr, X_v2_tr, Y_tr, lv1_tr, lv2_tr = augment_pair_swap(
+            X_v1_tr, X_v2_tr, Y_tr, lv1_tr, lv2_tr, log_target=args.log_target)
+        logging.getLogger(__name__).info("pair-swap 增强后训练集: %d 样本", Y_tr.shape[0])
+
     logging.getLogger(__name__).info("训练集: %d  验证集: %d", Y_tr.shape[0], Y_val.shape[0])
 
     train_ds = TensorDataset(X_v1_tr, X_v2_tr, Y_tr, lv1_tr, lv2_tr)
@@ -394,7 +456,9 @@ def main():
     for epoch in range(1, args.epochs + 1):
         train_loss = train_one_epoch(
             model, train_loader, criterion, optimizer, device,
-            max_grad_norm=args.grad_clip, noise_std=args.noise_std)
+            max_grad_norm=args.grad_clip, noise_std=args.noise_std,
+            direction_lambda=args.direction_lambda,
+            log_target=args.log_target)
         val_loss, val_mae, _, _ = evaluate(model, val_loader, criterion, device)
         scheduler.step()
 
@@ -413,6 +477,7 @@ def main():
                 "val_mae": float(val_mae),
                 "model_name": args.model,
                 "model_kwargs": model_kwargs,
+                "log_target": args.log_target,
             }, save_path)
             status = "← best"
         else:
