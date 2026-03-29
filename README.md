@@ -124,6 +124,7 @@ $$
 - 划分训练集/验证集
 - 使用 Huber Loss 训练模型
 - 通过 `--model` / `--arch` 选择 CNN、LSTM 或 Transformer
+- 可通过 `--output-model` 单独指定最佳模型输出位置
 - 自动保存最佳检查点到 `checkpoints/best_model.pt`
 
 推理脚本 `python/infer.py` 支持两种模式：
@@ -179,6 +180,16 @@ echo 1 | sudo tee /proc/sys/kernel/perf_event_paranoid
 - `matplotlib`
 - `torch`
 
+训练与推理脚本现在默认使用 `--device auto`，设备优先级为 `directml -> cuda -> cpu`。
+
+如果你希望默认命中 DirectML，需要在支持的平台上额外安装 `torch-directml`：
+
+```bash
+pip install torch-directml
+```
+
+如果当前环境没有 DirectML，脚本会自动回退到 CUDA 或 CPU；也可以显式传入 `--device directml`、`--device cuda` 或 `--device cpu`。
+
 安装方式：
 
 ```bash
@@ -220,6 +231,13 @@ make
 
 ```bash
 python3 python/train.py --model cnn
+```
+
+如果你想把最佳模型输出到其他位置，可以显式指定：
+
+```bash
+python3 python/train.py --model cnn \
+  --output-model checkpoints/experiments/cnn_best.pt
 ```
 
 训练输出：
@@ -572,8 +590,8 @@ make -j8
 cd ../..
 sudo train_set/generate_train_set.sh
 python3 python/build_dataset_fixedtime.py
-python3 python/train.py --model cnn
-python3 python/infer.py --checkpoint checkpoints/best_model.pt
+python3 python/train.py --model cnn  --tensor-base train_set/tensors/fixed_work
+python3 python/infer.py --checkpoint checkpoints/best_model.pt --tensor-base train_set/tensors/fixed_work --model cnn
 ```
 
 如果 `train_set/tensors/fixed_time/` 已经存在，这条路径就可以直接跑通训练与推理。

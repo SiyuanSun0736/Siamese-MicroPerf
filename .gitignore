@@ -12,3 +12,4 @@ pmu_monitor
 /python/plots
 /train_set/tensors
 /checkpoints
+/.env

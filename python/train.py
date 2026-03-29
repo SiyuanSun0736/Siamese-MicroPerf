@@ -16,6 +16,9 @@ train.py — Siamese-MicroPerf 训练 / 验证脚本
     # 自定义超参
     python3 python/train.py --epochs 200 --lr 1e-3
 
+    # 最佳模型输出位置
+    python3 python/train.py --output-model checkpoints/cnn_best.pt
+
     # 只用一组对
     python3 python/train.py --pairs O1-g_vs_O3-g
 
@@ -25,6 +28,11 @@ train.py — Siamese-MicroPerf 训练 / 验证脚本
     # 仅评估已有 checkpoint
     python3 python/train.py --eval-only --checkpoint checkpoints/best_model.pt
 
+    # 从已有 checkpoint 继续训练，并把最佳模型保存到新位置
+    python3 python/train.py --checkpoint checkpoints/best_model.pt \
+        --output-model checkpoints/transformer/directml_best.pt
+
+        
 说明
 ----
         - 使用 `--model` 或别名 `--arch` 选择主干：`cnn`（默认），`lstm`，或 `transformer`。
@@ -43,6 +51,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
+from device_utils import resolve_device
 from model_factory import MODEL_CHOICES, build_model, get_model_kwargs
 
 # ── 默认常量 ──────────────────────────────────────────────────────────────────
@@ -269,6 +278,14 @@ def main():
         "--checkpoint", type=Path, default=None,
         help="模型检查点路径（加载/保存）")
     parser.add_argument(
+        "--output-model", "--save-checkpoint", dest="output_model",
+        type=Path, default=None,
+        help="最佳模型输出路径（目录或 .pt 文件）；默认复用 --checkpoint 或保存到 checkpoints/best_model.pt")
+    parser.add_argument(
+        "--device", choices=["auto", "directml", "cuda", "cpu"],
+        default="auto",
+        help="运行设备（默认 auto，优先 directml，再回退到 cuda/cpu）")
+    parser.add_argument(
         "--eval-only", action="store_true",
         help="仅评估模式")
     parser.add_argument(
@@ -324,7 +341,12 @@ def main():
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    try:
+        device, resolved_device_name, device_message = resolve_device(args.device)
+    except RuntimeError as exc:
+        print(f"[ERROR] {exc}", file=sys.stderr)
+        sys.exit(1)
+
     # 配置日志：写入 project_root/log/train_YYYYmmdd_HHMMSS.log
     log_dir = args.project_root / "log"
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -344,6 +366,7 @@ def main():
     root_logger.addHandler(fh)
     root_logger.addHandler(sh)
 
+    logging.getLogger(__name__).info("%s", device_message)
     logging.getLogger(__name__).info("设备: %s", device)
 
     # ── 数据加载 ──
@@ -358,9 +381,10 @@ def main():
 
     in_features = X_v1.shape[2]  # D
     ckpt_file = resolve_checkpoint_file(args.checkpoint, create_dir=True)
+    output_model_file = resolve_checkpoint_file(args.output_model, create_dir=True)
     checkpoint_data = None
     if ckpt_file is not None and ckpt_file.exists():
-        checkpoint_data = torch.load(ckpt_file, map_location=device, weights_only=False)
+        checkpoint_data = torch.load(ckpt_file, map_location="cpu", weights_only=False)
         checkpoint_model_name = checkpoint_data.get("model_name")
         if checkpoint_model_name and checkpoint_model_name != args.model:
             raise ValueError(
@@ -435,8 +459,11 @@ def main():
     patience_counter = 0
     best_epoch = 0
     best_model_state = None
-    # 决定模型保存路径：优先使用 --checkpoint（目录或文件），否则放到 project_root/checkpoints/best_model.pt
-    if ckpt_file is not None:
+    # 决定模型保存路径：优先使用 --output-model，其次复用 --checkpoint，否则写入默认路径
+    if output_model_file is not None:
+        save_path = output_model_file
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+    elif ckpt_file is not None:
         save_path = ckpt_file
         save_path.parent.mkdir(parents=True, exist_ok=True)
     else:

@@ -49,6 +49,7 @@ import logging
 import numpy as np
 import torch
 
+from device_utils import resolve_device
 from model_factory import INFER_MODEL_CHOICES, build_model, get_model_kwargs
 
 # 复用 build_dataset 的特征提取逻辑
@@ -58,10 +59,10 @@ from build_dataset_fixedtime import extract_features  # noqa: E402
 
 # ── 工具函数 ──────────────────────────────────────────────────────────────────
 
-def load_model(checkpoint_path: Path, device: torch.device,
+def load_model(checkpoint_path: Path, device,
                model_name: str, model_kwargs: dict):
     """加载训练好的模型。返回 (model, model_name, model_kwargs, log_target)。"""
-    ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     checkpoint_model_name = ckpt.get("model_name")
     checkpoint_model_kwargs = ckpt.get("model_kwargs")
     log_target = ckpt.get("log_target", False)
@@ -293,6 +294,10 @@ def main():
         "--project-root", type=Path,
         default=Path(__file__).resolve().parent.parent,
         help="项目根目录")
+    parser.add_argument(
+        "--device", choices=["auto", "directml", "cuda", "cpu"],
+        default="auto",
+        help="运行设备（默认 auto，优先 directml，再回退到 cuda/cpu）")
 
     # 张量模式参数
     parser.add_argument(
@@ -336,7 +341,11 @@ def main():
     parser.add_argument("--dropout", type=float, default=0.1)
 
     args = parser.parse_args()
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    try:
+        device, resolved_device_name, device_message = resolve_device(args.device)
+    except RuntimeError as exc:
+        print(f"[ERROR] {exc}", file=sys.stderr)
+        sys.exit(1)
 
     # 配置日志：写入 project_root/log/infer_YYYYmmdd_HHMMSS.log
     log_dir = args.project_root / "log"
@@ -357,6 +366,10 @@ def main():
         root_logger.handlers = []
     root_logger.addHandler(fh)
     root_logger.addHandler(sh)
+
+    logging.getLogger(__name__).info("%s", device_message)
+    logging.getLogger(__name__).info("设备: %s", device)
+    logging.getLogger(__name__).info("设备类型: %s", resolved_device_name)
 
     fallback_model_name = "cnn" if args.model == "auto" else args.model
     fallback_model_kwargs = get_model_kwargs(
