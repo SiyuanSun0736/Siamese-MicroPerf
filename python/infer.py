@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# 注意：本模块已支持基于 `--model` 与 `--pairs` 的自动微调（auto-tune）回退配置。
+# 当启用 `--auto-tune`（默认开启）且 configs/ 和 checkpoint 中均未找到模型参数时，
+# 会使用 `train.py` 中的 `TUNED_CONFIGS` 为推理构建合适的模型架构参数。
+# 优先级：configs/ JSON > checkpoint 元数据 > `--auto-tune` 预设 > 命令行显式参数。
 """
 infer.py — 推理与验证阶段 (Inference / Validation)
 ===================================================
@@ -13,9 +17,9 @@ infer.py — 推理与验证阶段 (Inference / Validation)
 输出
 ----
     对每个程序输出：
-        - 预测加速比 Ŷ（标量）
-        - 判断结论：Ŷ > 1.0 → v1 优于 v2；Ŷ < 1.0 → v2 优于 v1
-        - 若有真实标签 Y，同时输出误差与验证指标
+    - 预测加速比 Ŷ（标量）
+    - 判断结论：Ŷ > 1.0 → v1 优于 v2；Ŷ < 1.0 → v2 优于 v1
+    - 若有真实标签 Y，同时输出误差与验证指标
 
 用法
 ----
@@ -27,16 +31,16 @@ infer.py — 推理与验证阶段 (Inference / Validation)
 
     # 使用固定工作量张量
     python3 python/infer.py --checkpoint checkpoints/best_model.pt \
-            --tensor-base train_set/tensors/fixed_work
+        --tensor-base train_set/tensors/fixed_work
 
     # 只推理指定版本对
     python3 python/infer.py --checkpoint checkpoints/best_model.pt \
-            --pairs O2-bolt_vs_O2-bolt-opt
+        --pairs O2-bolt_vs_O2-bolt-opt
 
     # 对两个原始 CSV 做单次推理
     python3 python/infer.py --checkpoint checkpoints/best_model.pt \
-            --csv-v1 path/to/v1.csv --csv-v2 path/to/v2.csv \
-            --stats train_set/tensors/fixed_time/O2-bolt_vs_O2-bolt-opt/stats.json
+        --csv-v1 path/to/v1.csv --csv-v2 path/to/v2.csv \
+        --stats train_set/tensors/fixed_time/O2-bolt_vs_O2-bolt-opt/stats.json
 """
 
 import argparse
@@ -51,6 +55,8 @@ import torch
 
 from device_utils import resolve_device
 from model_factory import INFER_MODEL_CHOICES, build_model, get_model_kwargs
+from train import (TUNED_CONFIGS, apply_tuned_config, DEFAULT_PAIRS,
+                   derive_config_path, load_model_config)
 
 # 复用 build_dataset 的特征提取逻辑
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -60,22 +66,16 @@ from build_dataset_fixedtime import extract_features  # noqa: E402
 # ── 工具函数 ──────────────────────────────────────────────────────────────────
 
 def load_model(checkpoint_path: Path, device,
-               model_name: str, model_kwargs: dict):
-    """加载训练好的模型。返回 (model, model_name, model_kwargs, log_target)。"""
-    ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
-    checkpoint_model_name = ckpt.get("model_name")
-    checkpoint_model_kwargs = ckpt.get("model_kwargs")
-    log_target = ckpt.get("log_target", False)
+               model_name: str, model_kwargs: dict,
+               log_target: bool | None = None):
+    """加载训练好的模型。返回 (model, model_name, model_kwargs, log_target)。
 
-    if model_name == "auto":
-        model_name = checkpoint_model_name or "cnn"
-        if checkpoint_model_kwargs:
-            model_kwargs = checkpoint_model_kwargs
-    elif checkpoint_model_name and checkpoint_model_name != model_name:
-        logging.getLogger(__name__).warning(
-            "检查点记录的模型类型为 %s，但当前显式指定为 %s；将按显式参数加载",
-            checkpoint_model_name, model_name,
-        )
+    model_name 和 model_kwargs 应在调用前已完成解析（不再在此处处理 auto）。
+    log_target 若为 None 则从 checkpoint 读取。
+    """
+    ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    if log_target is None:
+        log_target = ckpt.get("log_target", False)
 
     model = build_model(model_name, **model_kwargs).to(device)
     model.load_state_dict(ckpt["model_state_dict"])
@@ -339,8 +339,34 @@ def main():
                         default="learnable")
     parser.add_argument("--mlp-hidden", type=int, default=64)
     parser.add_argument("--dropout", type=float, default=0.1)
+    # 自动微调预设（仅应用模型架构参数）
+    parser.add_argument(
+        "--auto-tune", action="store_true", default=True,
+        help="根据 --model 和 --pairs 自动补全模型架构超参（默认开启；配置文件/checkpoint 优先）")
+    parser.add_argument(
+        "--no-auto-tune", dest="auto_tune", action="store_false",
+        help="禁用自动微调，使用命令行原始默认值")
+    # 配置目录（auto 信息与 checkpoint 分离）
+    parser.add_argument(
+        "--config-dir", type=Path, default=None,
+        help="模型配置 JSON 目录（默认 project_root/configs）")
+    parser.add_argument(
+        "--config", type=Path, default=None,
+        help="显式指定模型配置 JSON 文件路径（覆盖自动推导）")
 
+    # 1) 获取 argparse 原始默认值
+    arg_defaults = vars(parser.parse_args(["--checkpoint", "dummy.pt"]))
+    # 2) 正式解析
     args = parser.parse_args()
+    # 3) 识别用户显式指定的参数
+    args._explicitly_set = {
+        k for k, v in vars(args).items()
+        if k in arg_defaults and v != arg_defaults[k]
+    }
+    # 4) 非 auto 模式：直接应用 auto-tune
+    if args.auto_tune and args.model != "auto":
+        apply_tuned_config(args)
+
     try:
         device, resolved_device_name, device_message = resolve_device(args.device)
     except RuntimeError as exc:
@@ -371,17 +397,72 @@ def main():
     logging.getLogger(__name__).info("设备: %s", device)
     logging.getLogger(__name__).info("设备类型: %s", resolved_device_name)
 
-    fallback_model_name = "cnn" if args.model == "auto" else args.model
-    fallback_model_kwargs = get_model_kwargs(
-        fallback_model_name,
-        in_features=args.in_features,
-        args=args,
-    )
+    logger = logging.getLogger(__name__)
+
+    # ── 解析模型配置 ──
+    # 优先级：config JSON > checkpoint 元数据 > auto-tune 预设 > argparse 默认值
+    resolved_model_name = None
+    resolved_model_kwargs = None
+    resolved_log_target = None
+
+    if args.model == "auto":
+        # 1) 尝试从 configs/ 目录读取配置 JSON
+        config_dir = args.config_dir or (args.project_root / "configs")
+        config = None
+        if args.config:
+            config = load_model_config(args.config)
+            if config:
+                logger.info("从指定配置文件加载: %s", args.config)
+        else:
+            auto_config_path = derive_config_path(
+                args.checkpoint, args.project_root, config_dir)
+            config = load_model_config(auto_config_path)
+            if config:
+                logger.info("从配置文件自动加载: %s", auto_config_path)
+
+        if config:
+            resolved_model_name = config["model_name"]
+            resolved_model_kwargs = config["model_kwargs"]
+            resolved_log_target = config.get("log_target", False)
+        else:
+            # 2) 回退：从 checkpoint 文件读取元数据
+            ckpt_meta = torch.load(
+                args.checkpoint, map_location="cpu", weights_only=False)
+            ckpt_model_name = ckpt_meta.get("model_name")
+            ckpt_model_kwargs = ckpt_meta.get("model_kwargs")
+            resolved_log_target = ckpt_meta.get("log_target", False)
+
+            if ckpt_model_name and ckpt_model_kwargs:
+                resolved_model_name = ckpt_model_name
+                resolved_model_kwargs = ckpt_model_kwargs
+                logger.info("从 checkpoint 元数据获取模型信息: %s", ckpt_model_name)
+            else:
+                # 3) 最终回退：确定模型名后应用 auto-tune
+                resolved_model_name = ckpt_model_name or "cnn"
+                logger.info(
+                    "配置文件和 checkpoint 均无完整模型参数，"
+                    "使用 auto-tune 回退 (%s)", resolved_model_name)
+                # 临时设置 args.model 以便 apply_tuned_config 工作
+                args.model = resolved_model_name
+                if args.auto_tune:
+                    apply_tuned_config(args)
+                resolved_model_kwargs = get_model_kwargs(
+                    resolved_model_name,
+                    in_features=args.in_features, args=args)
+                args.model = "auto"  # 恢复
+
+    else:
+        # 显式指定模型类型
+        resolved_model_name = args.model
+        resolved_model_kwargs = get_model_kwargs(
+            args.model, in_features=args.in_features, args=args)
+
     model, resolved_model_name, resolved_model_kwargs, log_target = load_model(
         args.checkpoint,
         device,
-        model_name=args.model,
-        model_kwargs=fallback_model_kwargs,
+        model_name=resolved_model_name,
+        model_kwargs=resolved_model_kwargs,
+        log_target=resolved_log_target,
     )
     logging.getLogger(__name__).info("模型加载完成: %s  (设备: %s)", args.checkpoint, device)
     logging.getLogger(__name__).info("模型类型: %s", resolved_model_name)

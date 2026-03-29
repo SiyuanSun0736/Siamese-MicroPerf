@@ -13,3 +13,4 @@ pmu_monitor
 /train_set/tensors
 /checkpoints
 /.env
+/configs

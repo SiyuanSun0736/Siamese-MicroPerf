@@ -53,6 +53,10 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from device_utils import resolve_device
 from model_factory import MODEL_CHOICES, build_model, get_model_kwargs
+try:
+    from tuned_configs import LABEL_MECHANISMS, TUNED_CONFIGS
+except ImportError:
+    from python.tuned_configs import LABEL_MECHANISMS, TUNED_CONFIGS
 
 # ── 默认常量 ──────────────────────────────────────────────────────────────────
 
@@ -62,164 +66,80 @@ DEFAULT_PAIRS = [
     "O3-bolt_vs_O3-bolt-opt",
 ]
 
-# ── 每模型 × 每标签对 微调超参配置 ─────────────────────────────────────────
-# 结构: TUNED_CONFIGS[model_name] 包含 "model" (模型架构参数)
-#       和 "training" (训练超参) 两段；"training" 可按标签对名进一步覆写。
 
-TUNED_CONFIGS: dict[str, dict] = {
-    # ──────────────── CNN ────────────────
-    "cnn": {
-        "model": {
-            "cnn_hidden": 64,
-            "cnn_out": 128,
-            "mlp_hidden": 64,
-            "dropout": 0.10,
-        },
-        "training": {
-            "_default": {
-                "lr": 1e-3,
-                "weight_decay": 1e-4,
-                "batch_size": 32,
-                "epochs": 150,
-                "patience": 30,
-                "warmup_epochs": 10,
-                "huber_delta": 1.0,
-                "grad_clip": 1.0,
-                "noise_std": 0.05,
-                "direction_lambda": 0.0,
-                "pair_swap": False,
-                "log_target": False,
-            },
-            # 编译级别差异大，可用更大 δ、pair-swap 增强
-            "O1-g_vs_O3-g": {
-                "huber_delta": 1.5,
-                "pair_swap": True,
-                "noise_std": 0.06,
-            },
-            # BOLT 优化幅度小，需精细回归
-            "O2-bolt_vs_O2-bolt-opt": {
-                "huber_delta": 0.5,
-                "lr": 8e-4,
-                "direction_lambda": 0.1,
-                "noise_std": 0.03,
-            },
-            "O3-bolt_vs_O3-bolt-opt": {
-                "huber_delta": 0.5,
-                "lr": 8e-4,
-                "direction_lambda": 0.1,
-                "noise_std": 0.03,
-            },
-        },
-    },
-    # ──────────────── LSTM ────────────────
-    "lstm": {
-        "model": {
-            "lstm_hidden": 64,
-            "lstm_out": 128,
-            "num_layers": 2,
-            "bidirectional": True,
-            "mlp_hidden": 64,
-            "dropout": 0.15,
-        },
-        "training": {
-            "_default": {
-                "lr": 5e-4,
-                "weight_decay": 1e-4,
-                "batch_size": 32,
-                "epochs": 200,
-                "patience": 40,
-                "warmup_epochs": 15,
-                "huber_delta": 1.0,
-                "grad_clip": 0.5,
-                "noise_std": 0.03,
-                "direction_lambda": 0.0,
-                "pair_swap": False,
-                "log_target": False,
-            },
-            "O1-g_vs_O3-g": {
-                "huber_delta": 1.5,
-                "pair_swap": True,
-                "noise_std": 0.04,
-            },
-            "O2-bolt_vs_O2-bolt-opt": {
-                "huber_delta": 0.5,
-                "lr": 3e-4,
-                "direction_lambda": 0.15,
-                "noise_std": 0.02,
-                "patience": 50,
-            },
-            "O3-bolt_vs_O3-bolt-opt": {
-                "huber_delta": 0.5,
-                "lr": 3e-4,
-                "direction_lambda": 0.15,
-                "noise_std": 0.02,
-                "patience": 50,
-            },
-        },
-    },
-    # ──────────────── Transformer ────────────────
-    "transformer": {
-        "model": {
-            "d_model": 128,
-            "nhead": 4,
-            "num_layers": 3,
-            "dim_feedforward": 256,
-            "max_len": 512,
-            "pos_encoding": "learnable",
-            "mlp_hidden": 64,
-            "dropout": 0.10,
-        },
-        "training": {
-            "_default": {
-                "lr": 3e-4,
-                "weight_decay": 1e-4,
-                "batch_size": 32,
-                "epochs": 200,
-                "patience": 40,
-                "warmup_epochs": 20,
-                "huber_delta": 1.0,
-                "grad_clip": 1.0,
-                "noise_std": 0.02,
-                "direction_lambda": 0.0,
-                "pair_swap": False,
-                "log_target": False,
-            },
-            "O1-g_vs_O3-g": {
-                "huber_delta": 1.5,
-                "pair_swap": True,
-                "warmup_epochs": 25,
-                "noise_std": 0.03,
-            },
-            "O2-bolt_vs_O2-bolt-opt": {
-                "huber_delta": 0.5,
-                "lr": 2e-4,
-                "direction_lambda": 0.1,
-                "noise_std": 0.01,
-                "patience": 50,
-            },
-            "O3-bolt_vs_O3-bolt-opt": {
-                "huber_delta": 0.5,
-                "lr": 2e-4,
-                "direction_lambda": 0.1,
-                "noise_std": 0.01,
-                "patience": 50,
-            },
-        },
-    },
-}
+def derive_config_path(save_path: Path, project_root: Path,
+                       config_dir: Path | None = None) -> Path:
+    """从模型保存路径推导配置 JSON 路径。
+
+    将 checkpoints/ 下的 .pt 路径映射到 configs/ 下的 .json 路径。
+    """
+    if config_dir is None:
+        config_dir = project_root / "configs"
+    try:
+        rel = save_path.resolve().relative_to(
+            (project_root / "checkpoints").resolve())
+        return config_dir / rel.with_suffix(".json")
+    except ValueError:
+        return config_dir / save_path.with_suffix(".json").name
 
 
-def apply_tuned_config(args: argparse.Namespace) -> None:
-    """根据 --model 和 --pairs 将 TUNED_CONFIGS 中的预设写入 args（仅覆盖用户未显式指定的参数）。
+def save_model_config(config_path: Path, *, model_name: str,
+                      model_kwargs: dict, log_target: bool,
+                      checkpoint_path: Path | str,
+                      training_args: dict | None = None) -> None:
+    """保存模型配置到 JSON 文件（与 checkpoint 分离存储）。"""
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config: dict = {
+        "model_name": model_name,
+        "model_kwargs": model_kwargs,
+        "log_target": log_target,
+        "checkpoint": str(checkpoint_path),
+    }
+    if training_args:
+        config["training_config"] = training_args
+    config_path.write_text(json.dumps(config, indent=2, ensure_ascii=False))
+
+
+def load_model_config(config_path: Path | None) -> dict | None:
+    """从 JSON 文件加载模型配置。"""
+    if config_path and config_path.exists():
+        return json.loads(config_path.read_text())
+    return None
+
+
+def detect_label_mechanism(tensor_base: Path) -> str:
+    """从 tensor_base 路径自动推断标签机制。
+
+    匹配规则：路径中包含 'inst_retired' → inst_retired；
+    包含 'fixed_work' → fixed_work；其余默认 fixed_time。
+    """
+    path_str = str(tensor_base)
+    if "inst_retired" in path_str or "instret" in path_str:
+        return "inst_retired"
+    if "fixed_work" in path_str:
+        return "fixed_work"
+    return "fixed_time"
+
+
+def apply_tuned_config(args: argparse.Namespace,
+                       label_mechanism: str = "fixed_time") -> None:
+    """根据 --label-mechanism、--model 和 --pairs 将 TUNED_CONFIGS 中的预设写入 args。
 
     覆盖优先级：命令行显式值 > 标签对专属配置 > 模型默认配置 > argparse 默认值。
     当使用多组标签对混合训练时，取各对训练超参的保守合并（数值参数取均值，布尔参数取 OR）。
+    若指定的 label_mechanism 不在 TUNED_CONFIGS 中，回退到 fixed_time。
     """
     model_name = args.model
-    if model_name not in TUNED_CONFIGS:
+
+    # 回退策略：label_mechanism → fixed_time
+    if label_mechanism not in TUNED_CONFIGS:
+        label_mechanism = "fixed_time"
+    mechanism_cfg = TUNED_CONFIGS[label_mechanism]
+
+    if model_name not in mechanism_cfg:
         return
 
-    cfg = TUNED_CONFIGS[model_name]
+    cfg = mechanism_cfg[model_name]
 
     # ── 1) 模型架构参数 ──
     for key, val in cfg["model"].items():
@@ -541,6 +461,15 @@ def main():
     parser.add_argument(
         "--no-auto-tune", dest="auto_tune", action="store_false",
         help="禁用自动微调预设，使用命令行原始默认值")
+    # 标签机制
+    parser.add_argument(
+        "--label-mechanism", dest="label_mechanism",
+        choices=["auto"] + list(LABEL_MECHANISMS), default="auto",
+        help="标签机制（auto 从 --tensor-base 路径自动推断，默认 auto）")
+    # 配置输出目录（auto 信息与模型 checkpoint 分离）
+    parser.add_argument(
+        "--config-dir", type=Path, default=None,
+        help="模型配置 JSON 输出目录（默认 project_root/configs）")
 
     # 1) 先获取 argparse 的原始默认值
     arg_defaults = vars(parser.parse_args([]))
@@ -552,9 +481,14 @@ def main():
         if k in arg_defaults and v != arg_defaults[k]
     }
 
-    # 4) 自动微调：用 TUNED_CONFIGS 覆盖未显式指定的参数
+    # 4) 解析标签机制（auto 时从 tensor_base 路径推断）
+    tensor_base = args.tensor_base or (args.project_root / "train_set" / "tensors" / "fixed_time")
+    if args.label_mechanism == "auto":
+        args.label_mechanism = detect_label_mechanism(tensor_base)
+
+    # 5) 自动微调：用 TUNED_CONFIGS 覆盖未显式指定的参数
     if args.auto_tune:
-        apply_tuned_config(args)
+        apply_tuned_config(args, label_mechanism=args.label_mechanism)
 
     # 固定随机种子
     torch.manual_seed(args.seed)
@@ -589,20 +523,22 @@ def main():
     logging.getLogger(__name__).info("设备: %s", device)
 
     # 打印自动微调信息
-    if args.auto_tune and args.model in TUNED_CONFIGS:
+    lm = args.label_mechanism
+    logging.getLogger(__name__).info("标签机制: %s", lm)
+    if args.auto_tune and lm in TUNED_CONFIGS and args.model in TUNED_CONFIGS[lm]:
+        model_cfg = TUNED_CONFIGS[lm][args.model]
         tuned_keys = {
             k for k in vars(args)
-            if k in TUNED_CONFIGS[args.model].get("model", {})
-            or k in TUNED_CONFIGS[args.model].get("training", {}).get("_default", {})
-        } - args._explicitly_set - {"_explicitly_set", "auto_tune"}
+            if k in model_cfg.get("model", {})
+            or k in model_cfg.get("training", {}).get("_default", {})
+        } - args._explicitly_set - {"_explicitly_set", "auto_tune", "label_mechanism"}
         if tuned_keys:
             logging.getLogger(__name__).info(
-                "自动微调 [%s]: %s",
-                args.model,
+                "自动微调 [%s/%s]: %s",
+                lm, args.model,
                 ", ".join(f"{k}={getattr(args, k)}" for k in sorted(tuned_keys)))
 
     # ── 数据加载 ──
-    tensor_base = args.tensor_base or (args.project_root / "train_set" / "tensors" / "fixed_time")
     pair_names = args.pairs or DEFAULT_PAIRS
 
     logging.getLogger(__name__).info("加载数据...")
@@ -703,7 +639,12 @@ def main():
         save_dir.mkdir(parents=True, exist_ok=True)
         save_path = save_dir / "best_model.pt"
 
+    # 计算配置文件保存路径（configs/ 目录，与 checkpoints 分离）
+    config_dir = args.config_dir or (args.project_root / "configs")
+    config_save_path = derive_config_path(save_path, args.project_root, config_dir)
+
     logging.getLogger(__name__).info("模型保存路径: %s", save_path)
+    logging.getLogger(__name__).info("配置保存路径: %s", config_save_path)
     logging.getLogger(__name__).info(
         "\n开始训练 (%d epochs, Huber δ=%s, patience=%d)...",
         args.epochs, args.huber_delta, args.patience)
@@ -734,10 +675,24 @@ def main():
                 "model_state_dict": model.state_dict(),
                 "val_loss": float(val_loss),
                 "val_mae": float(val_mae),
-                "model_name": args.model,
-                "model_kwargs": model_kwargs,
-                "log_target": args.log_target,
             }, save_path)
+            # 将模型配置写入 configs/ 目录（与 checkpoint 分离）
+            save_model_config(
+                config_save_path,
+                model_name=args.model,
+                model_kwargs=model_kwargs,
+                log_target=args.log_target,
+                checkpoint_path=save_path,
+                training_args={
+                    "lr": args.lr,
+                    "weight_decay": args.weight_decay,
+                    "batch_size": args.batch_size,
+                    "epochs": args.epochs,
+                    "huber_delta": args.huber_delta,
+                    "pairs": pair_names,
+                    "tensor_base": str(tensor_base),
+                },
+            )
             status = "← best"
         else:
             patience_counter += 1
@@ -763,6 +718,7 @@ def main():
     logging.getLogger(__name__).info("  Val Loss = %.6f", val_loss)
     logging.getLogger(__name__).info("  Val MAE  = %.4f", val_mae)
     logging.getLogger(__name__).info("  模型保存: %s", save_path)
+    logging.getLogger(__name__).info("  配置保存: %s", config_save_path)
 
     # 输出部分预测样本
     logging.getLogger(__name__).info("\n预测示例 (前 10 个验证样本):")
