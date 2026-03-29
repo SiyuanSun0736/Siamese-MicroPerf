@@ -99,6 +99,39 @@ def save_model_config(config_path: Path, *, model_name: str,
         config["training_config"] = training_args
     config_path.write_text(json.dumps(config, indent=2, ensure_ascii=False))
 
+def collect_training_config(args: argparse.Namespace, *, pair_names: list[str],
+                            tensor_base: Path,
+                            resolved_device_name: str) -> dict:
+    """收集当前运行实际生效的训练配置，便于随模型一起持久化。"""
+    return {
+        "label_mechanism": args.label_mechanism,
+        "auto_tune": args.auto_tune,
+        "explicitly_set": sorted(args._explicitly_set),  # noqa: SLF001
+        "tensor_base": str(tensor_base),
+        "pairs": list(pair_names),
+        "device": resolved_device_name,
+        "seed": args.seed,
+        "val_ratio": args.val_ratio,
+        "epochs": args.epochs,
+        "batch_size": args.batch_size,
+        "lr": args.lr,
+        "weight_decay": args.weight_decay,
+        "huber_delta": args.huber_delta,
+        "patience": args.patience,
+        "grad_clip": args.grad_clip,
+        "noise_std": args.noise_std,
+        "warmup_epochs": args.warmup_epochs,
+        "log_target": args.log_target,
+        "direction_lambda": args.direction_lambda,
+        "pair_swap": args.pair_swap,
+        "optimizer": "Adam",
+        "scheduler": {
+            "name": "LambdaLR",
+            "warmup": "linear",
+            "decay": "cosine",
+        },
+    }
+
 
 def load_model_config(config_path: Path | None) -> dict | None:
     """从 JSON 文件加载模型配置。"""
@@ -642,6 +675,12 @@ def main():
     # 计算配置文件保存路径（configs/ 目录，与 checkpoints 分离）
     config_dir = args.config_dir or (args.project_root / "configs")
     config_save_path = derive_config_path(save_path, args.project_root, config_dir)
+    effective_training_config = collect_training_config(
+        args,
+        pair_names=pair_names,
+        tensor_base=tensor_base,
+        resolved_device_name=resolved_device_name,
+    )
 
     logging.getLogger(__name__).info("模型保存路径: %s", save_path)
     logging.getLogger(__name__).info("配置保存路径: %s", config_save_path)
@@ -683,15 +722,7 @@ def main():
                 model_kwargs=model_kwargs,
                 log_target=args.log_target,
                 checkpoint_path=save_path,
-                training_args={
-                    "lr": args.lr,
-                    "weight_decay": args.weight_decay,
-                    "batch_size": args.batch_size,
-                    "epochs": args.epochs,
-                    "huber_delta": args.huber_delta,
-                    "pairs": pair_names,
-                    "tensor_base": str(tensor_base),
-                },
+                training_args=effective_training_config,
             )
             status = "← best"
         else:
