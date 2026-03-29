@@ -62,6 +62,206 @@ DEFAULT_PAIRS = [
     "O3-bolt_vs_O3-bolt-opt",
 ]
 
+# ── 每模型 × 每标签对 微调超参配置 ─────────────────────────────────────────
+# 结构: TUNED_CONFIGS[model_name] 包含 "model" (模型架构参数)
+#       和 "training" (训练超参) 两段；"training" 可按标签对名进一步覆写。
+
+TUNED_CONFIGS: dict[str, dict] = {
+    # ──────────────── CNN ────────────────
+    "cnn": {
+        "model": {
+            "cnn_hidden": 64,
+            "cnn_out": 128,
+            "mlp_hidden": 64,
+            "dropout": 0.10,
+        },
+        "training": {
+            "_default": {
+                "lr": 1e-3,
+                "weight_decay": 1e-4,
+                "batch_size": 32,
+                "epochs": 150,
+                "patience": 30,
+                "warmup_epochs": 10,
+                "huber_delta": 1.0,
+                "grad_clip": 1.0,
+                "noise_std": 0.05,
+                "direction_lambda": 0.0,
+                "pair_swap": False,
+                "log_target": False,
+            },
+            # 编译级别差异大，可用更大 δ、pair-swap 增强
+            "O1-g_vs_O3-g": {
+                "huber_delta": 1.5,
+                "pair_swap": True,
+                "noise_std": 0.06,
+            },
+            # BOLT 优化幅度小，需精细回归
+            "O2-bolt_vs_O2-bolt-opt": {
+                "huber_delta": 0.5,
+                "lr": 8e-4,
+                "direction_lambda": 0.1,
+                "noise_std": 0.03,
+            },
+            "O3-bolt_vs_O3-bolt-opt": {
+                "huber_delta": 0.5,
+                "lr": 8e-4,
+                "direction_lambda": 0.1,
+                "noise_std": 0.03,
+            },
+        },
+    },
+    # ──────────────── LSTM ────────────────
+    "lstm": {
+        "model": {
+            "lstm_hidden": 64,
+            "lstm_out": 128,
+            "num_layers": 2,
+            "bidirectional": True,
+            "mlp_hidden": 64,
+            "dropout": 0.15,
+        },
+        "training": {
+            "_default": {
+                "lr": 5e-4,
+                "weight_decay": 1e-4,
+                "batch_size": 32,
+                "epochs": 200,
+                "patience": 40,
+                "warmup_epochs": 15,
+                "huber_delta": 1.0,
+                "grad_clip": 0.5,
+                "noise_std": 0.03,
+                "direction_lambda": 0.0,
+                "pair_swap": False,
+                "log_target": False,
+            },
+            "O1-g_vs_O3-g": {
+                "huber_delta": 1.5,
+                "pair_swap": True,
+                "noise_std": 0.04,
+            },
+            "O2-bolt_vs_O2-bolt-opt": {
+                "huber_delta": 0.5,
+                "lr": 3e-4,
+                "direction_lambda": 0.15,
+                "noise_std": 0.02,
+                "patience": 50,
+            },
+            "O3-bolt_vs_O3-bolt-opt": {
+                "huber_delta": 0.5,
+                "lr": 3e-4,
+                "direction_lambda": 0.15,
+                "noise_std": 0.02,
+                "patience": 50,
+            },
+        },
+    },
+    # ──────────────── Transformer ────────────────
+    "transformer": {
+        "model": {
+            "d_model": 128,
+            "nhead": 4,
+            "num_layers": 3,
+            "dim_feedforward": 256,
+            "max_len": 512,
+            "pos_encoding": "learnable",
+            "mlp_hidden": 64,
+            "dropout": 0.10,
+        },
+        "training": {
+            "_default": {
+                "lr": 3e-4,
+                "weight_decay": 1e-4,
+                "batch_size": 32,
+                "epochs": 200,
+                "patience": 40,
+                "warmup_epochs": 20,
+                "huber_delta": 1.0,
+                "grad_clip": 1.0,
+                "noise_std": 0.02,
+                "direction_lambda": 0.0,
+                "pair_swap": False,
+                "log_target": False,
+            },
+            "O1-g_vs_O3-g": {
+                "huber_delta": 1.5,
+                "pair_swap": True,
+                "warmup_epochs": 25,
+                "noise_std": 0.03,
+            },
+            "O2-bolt_vs_O2-bolt-opt": {
+                "huber_delta": 0.5,
+                "lr": 2e-4,
+                "direction_lambda": 0.1,
+                "noise_std": 0.01,
+                "patience": 50,
+            },
+            "O3-bolt_vs_O3-bolt-opt": {
+                "huber_delta": 0.5,
+                "lr": 2e-4,
+                "direction_lambda": 0.1,
+                "noise_std": 0.01,
+                "patience": 50,
+            },
+        },
+    },
+}
+
+
+def apply_tuned_config(args: argparse.Namespace) -> None:
+    """根据 --model 和 --pairs 将 TUNED_CONFIGS 中的预设写入 args（仅覆盖用户未显式指定的参数）。
+
+    覆盖优先级：命令行显式值 > 标签对专属配置 > 模型默认配置 > argparse 默认值。
+    当使用多组标签对混合训练时，取各对训练超参的保守合并（数值参数取均值，布尔参数取 OR）。
+    """
+    model_name = args.model
+    if model_name not in TUNED_CONFIGS:
+        return
+
+    cfg = TUNED_CONFIGS[model_name]
+
+    # ── 1) 模型架构参数 ──
+    for key, val in cfg["model"].items():
+        if key in args._explicitly_set:  # noqa: SLF001
+            continue
+        setattr(args, key, val)
+
+    # ── 2) 训练超参 ──
+    training_cfg = cfg["training"]
+    base = dict(training_cfg["_default"])
+
+    pair_names = args.pairs or DEFAULT_PAIRS
+    # 收集每个标签对的覆写
+    per_pair_overrides: list[dict] = []
+    for pname in pair_names:
+        if pname in training_cfg:
+            per_pair_overrides.append(training_cfg[pname])
+
+    # 合并标签对专属覆写：数值取均值，布尔取 OR
+    merged_override: dict = {}
+    if per_pair_overrides:
+        all_keys = {k for d in per_pair_overrides for k in d}
+        for key in all_keys:
+            vals = [d[key] for d in per_pair_overrides if key in d]
+            if isinstance(vals[0], bool):
+                merged_override[key] = any(vals)
+            elif isinstance(vals[0], (int, float)):
+                merged_override[key] = sum(vals) / len(vals)
+                # 如果原始类型是 int，四舍五入回 int
+                if isinstance(vals[0], int):
+                    merged_override[key] = round(merged_override[key])
+
+    # base + merged_override = 最终预设
+    final = {**base, **merged_override}
+
+    for key, val in final.items():
+        if key.startswith("_"):
+            continue
+        if key in args._explicitly_set:  # noqa: SLF001
+            continue
+        setattr(args, key, val)
+
 
 def resolve_checkpoint_file(checkpoint: Path | None, create_dir: bool = False) -> Path | None:
     """将目录/文件形式的 checkpoint 参数解析为具体文件路径。"""
@@ -334,8 +534,27 @@ def main():
     # 通用头部超参
     parser.add_argument("--mlp-hidden", type=int, default=64)
     parser.add_argument("--dropout", type=float, default=0.1)
+    # 自动微调预设
+    parser.add_argument(
+        "--auto-tune", action="store_true", default=True,
+        help="根据 --model 和 --pairs 自动应用微调超参预设（默认开启）")
+    parser.add_argument(
+        "--no-auto-tune", dest="auto_tune", action="store_false",
+        help="禁用自动微调预设，使用命令行原始默认值")
 
+    # 1) 先获取 argparse 的原始默认值
+    arg_defaults = vars(parser.parse_args([]))
+    # 2) 正式解析
     args = parser.parse_args()
+    # 3) 识别用户在命令行上显式指定的参数
+    args._explicitly_set = {
+        k for k, v in vars(args).items()
+        if k in arg_defaults and v != arg_defaults[k]
+    }
+
+    # 4) 自动微调：用 TUNED_CONFIGS 覆盖未显式指定的参数
+    if args.auto_tune:
+        apply_tuned_config(args)
 
     # 固定随机种子
     torch.manual_seed(args.seed)
@@ -368,6 +587,19 @@ def main():
 
     logging.getLogger(__name__).info("%s", device_message)
     logging.getLogger(__name__).info("设备: %s", device)
+
+    # 打印自动微调信息
+    if args.auto_tune and args.model in TUNED_CONFIGS:
+        tuned_keys = {
+            k for k in vars(args)
+            if k in TUNED_CONFIGS[args.model].get("model", {})
+            or k in TUNED_CONFIGS[args.model].get("training", {}).get("_default", {})
+        } - args._explicitly_set - {"_explicitly_set", "auto_tune"}
+        if tuned_keys:
+            logging.getLogger(__name__).info(
+                "自动微调 [%s]: %s",
+                args.model,
+                ", ".join(f"{k}={getattr(args, k)}" for k in sorted(tuned_keys)))
 
     # ── 数据加载 ──
     tensor_base = args.tensor_base or (args.project_root / "train_set" / "tensors" / "fixed_time")
