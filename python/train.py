@@ -112,6 +112,7 @@ def collect_training_config(args: argparse.Namespace, *, pair_names: list[str],
         "device": resolved_device_name,
         "seed": args.seed,
         "val_ratio": args.val_ratio,
+        "test_ratio": args.test_ratio,
         "epochs": args.epochs,
         "batch_size": args.batch_size,
         "lr": args.lr,
@@ -276,22 +277,31 @@ def merge_pairs(tensor_base: Path, pair_names: list[str]):
             torch.cat(all_lv1), torch.cat(all_lv2))
 
 
-def train_val_split(X_v1, X_v2, Y, len_v1, len_v2, val_ratio=0.2, seed=42):
-    """按比例随机划分训练集和验证集。"""
+def train_val_test_split(X_v1, X_v2, Y, len_v1, len_v2,
+                         val_ratio=0.15, test_ratio=0.15, seed=42):
+    """按比例随机划分训练集、验证集和测试集。
+
+    验证集用于早停和模型选择，测试集仅用于最终无偏评估。
+    """
     N = X_v1.shape[0]
     indices = np.arange(N)
     rng = np.random.default_rng(seed)
     rng.shuffle(indices)
-    split = int(N * (1 - val_ratio))
 
-    train_idx = torch.tensor(indices[:split], dtype=torch.long)
-    val_idx = torch.tensor(indices[split:], dtype=torch.long)
+    n_test = int(N * test_ratio)
+    n_val = int(N * val_ratio)
+
+    test_idx = torch.tensor(indices[:n_test], dtype=torch.long)
+    val_idx = torch.tensor(indices[n_test:n_test + n_val], dtype=torch.long)
+    train_idx = torch.tensor(indices[n_test + n_val:], dtype=torch.long)
 
     return (
         X_v1[train_idx], X_v2[train_idx], Y[train_idx],
         len_v1[train_idx], len_v2[train_idx],
         X_v1[val_idx], X_v2[val_idx], Y[val_idx],
         len_v1[val_idx], len_v2[val_idx],
+        X_v1[test_idx], X_v2[test_idx], Y[test_idx],
+        len_v1[test_idx], len_v2[test_idx],
     )
 
 
@@ -422,8 +432,11 @@ def main():
         "--huber-delta", type=float, default=1.0,
         help="Huber Loss δ 参数")
     parser.add_argument(
-        "--val-ratio", type=float, default=0.2,
+        "--val-ratio", type=float, default=0.15,
         help="验证集比例")
+    parser.add_argument(
+        "--test-ratio", type=float, default=0.15,
+        help="测试集比例（仅用于最终无偏评估，训练过程中不接触）")
     parser.add_argument(
         "--seed", type=int, default=42,
         help="随机种子")
@@ -592,16 +605,20 @@ def main():
                 f"检查点模型类型为 {checkpoint_model_name}，但当前 --model={args.model}"
             )
 
-    # ── 划分训练/验证集 ──
+    # ── 划分训练/验证/测试集 ──
     X_v1_tr, X_v2_tr, Y_tr, lv1_tr, lv2_tr, \
-        X_v1_val, X_v2_val, Y_val, lv1_val, lv2_val = \
-        train_val_split(X_v1, X_v2, Y, len_v1, len_v2,
-                        val_ratio=args.val_ratio, seed=args.seed)
+        X_v1_val, X_v2_val, Y_val, lv1_val, lv2_val, \
+        X_v1_test, X_v2_test, Y_test, lv1_test, lv2_test = \
+        train_val_test_split(X_v1, X_v2, Y, len_v1, len_v2,
+                             val_ratio=args.val_ratio,
+                             test_ratio=args.test_ratio,
+                             seed=args.seed)
 
     # ── Log-target 变换 ──
     if args.log_target:
         Y_tr = torch.log(Y_tr)
         Y_val = torch.log(Y_val)
+        Y_test = torch.log(Y_test)
         logging.getLogger(__name__).info("已启用 log-target 变换: Y → log(Y)")
 
     # ── 对称增强: pair-swap ──
@@ -610,13 +627,17 @@ def main():
             X_v1_tr, X_v2_tr, Y_tr, lv1_tr, lv2_tr, log_target=args.log_target)
         logging.getLogger(__name__).info("pair-swap 增强后训练集: %d 样本", Y_tr.shape[0])
 
-    logging.getLogger(__name__).info("训练集: %d  验证集: %d", Y_tr.shape[0], Y_val.shape[0])
+    logging.getLogger(__name__).info(
+        "训练集: %d  验证集: %d  测试集: %d",
+        Y_tr.shape[0], Y_val.shape[0], Y_test.shape[0])
 
     train_ds = TensorDataset(X_v1_tr, X_v2_tr, Y_tr, lv1_tr, lv2_tr)
     val_ds = TensorDataset(X_v1_val, X_v2_val, Y_val, lv1_val, lv2_val)
+    test_ds = TensorDataset(X_v1_test, X_v2_test, Y_test, lv1_test, lv2_test)
 
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=args.batch_size)
+    test_loader = DataLoader(test_ds, batch_size=args.batch_size)
 
     # ── 模型 ──
     model_kwargs = get_model_kwargs(args.model, in_features=in_features, args=args)
@@ -639,8 +660,10 @@ def main():
     if args.eval_only:
         val_loss, val_mae, pred, true = evaluate(model, val_loader, criterion, device)
         logging.getLogger(__name__).info("\n验证集  Loss=%.4f  MAE=%.4f", val_loss, val_mae)
-        for i in range(min(10, len(pred))):
-            logging.getLogger(__name__).info("  样本 %d: 真实=%.4f  预测=%.4f", i, true[i].item(), pred[i].item())
+        test_loss, test_mae, test_pred, test_true = evaluate(model, test_loader, criterion, device)
+        logging.getLogger(__name__).info("测试集  Loss=%.4f  MAE=%.4f", test_loss, test_mae)
+        for i in range(min(10, len(test_pred))):
+            logging.getLogger(__name__).info("  样本 %d: 真实=%.4f  预测=%.4f", i, test_true[i].item(), test_pred[i].item())
         return
 
     # ── 训练 ──
@@ -739,26 +762,27 @@ def main():
                 "\n早停触发: 验证 loss 连续 %d epoch 未改善", args.patience)
             break
 
-    # ── 最终评估 ──
+    # ── 最终评估（在测试集上进行无偏评估）──
     if best_model_state is not None:
         model.load_state_dict(best_model_state)
-    val_loss, val_mae, pred, true = evaluate(model, val_loader, criterion, device)
+    val_loss, val_mae, _, _ = evaluate(model, val_loader, criterion, device)
+    test_loss, test_mae, test_pred, test_true = evaluate(model, test_loader, criterion, device)
 
     logging.getLogger(__name__).info("%s", '=' * 60)
     logging.getLogger(__name__).info("最佳模型 (epoch %d)", best_epoch)
-    logging.getLogger(__name__).info("  Val Loss = %.6f", val_loss)
-    logging.getLogger(__name__).info("  Val MAE  = %.4f", val_mae)
+    logging.getLogger(__name__).info("  Val  Loss = %.6f  MAE = %.4f  (模型选择依据)", val_loss, val_mae)
+    logging.getLogger(__name__).info("  Test Loss = %.6f  MAE = %.4f  (最终无偏评估)", test_loss, test_mae)
     logging.getLogger(__name__).info("  模型保存: %s", save_path)
     logging.getLogger(__name__).info("  配置保存: %s", config_save_path)
 
-    # 输出部分预测样本
-    logging.getLogger(__name__).info("\n预测示例 (前 10 个验证样本):")
+    # 输出部分预测样本（来自测试集）
+    logging.getLogger(__name__).info("\n预测示例 (前 10 个测试样本):")
     logging.getLogger(__name__).info("  %10s  %10s  %10s", '真实 Y', '预测 Ŷ', '误差')
-    for i in range(min(10, len(pred))):
-        err = pred[i].item() - true[i].item()
+    for i in range(min(10, len(test_pred))):
+        err = test_pred[i].item() - test_true[i].item()
         logging.getLogger(__name__).info(
             "  %10.4f  %10.4f  % +10.4f",
-            true[i].item(), pred[i].item(), err)
+            test_true[i].item(), test_pred[i].item(), err)
 
 
 if __name__ == "__main__":

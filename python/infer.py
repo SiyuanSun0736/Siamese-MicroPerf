@@ -3,6 +3,19 @@
 # 当启用 `--auto-tune`（默认开启）且 configs/ 和 checkpoint 中均未找到模型参数时，
 # 会使用 `train.py` 中的 `TUNED_CONFIGS` 为推理构建合适的模型架构参数。
 # 优先级：configs/ JSON > checkpoint 元数据 > `--auto-tune` 预设 > 命令行显式参数。
+#
+# log_target 适配
+# ---------------
+# 训练时若启用 `--log-target`，模型在 log(Y) 空间输出，推理端需在输出后执行 exp() 回变换。
+# 该标志写入 checkpoint 元数据和 configs/ JSON，推理时自动读取，无需手动指定。
+# 如需强制覆盖，可传入 `--log-target`（强制启用）或 `--no-log-target`（强制禁用）。
+# 优先级：命令行显式 > configs/ JSON > checkpoint 元数据 > False（默认）
+#
+# pair_swap 适配
+# --------------
+# pair_swap 是纯训练时数据增强（将 (v2, v1, 1/Y) 追加至训练集，令模型学到反对称性），
+# 推理始终以 (v1, v2) 自然顺序输入，无需任何额外处理。
+# 推理端会从 checkpoint 读取该标志并在日志中展示，不影响推理逻辑。
 """
 infer.py — 推理与验证阶段 (Inference / Validation)
 ===================================================
@@ -41,6 +54,10 @@ infer.py — 推理与验证阶段 (Inference / Validation)
     python3 python/infer.py --checkpoint checkpoints/best_model.pt \
         --csv-v1 path/to/v1.csv --csv-v2 path/to/v2.csv \
         --stats train_set/tensors/fixed_time/O2-bolt_vs_O2-bolt-opt/stats.json
+
+    # 强制覆盖 log-target 设置（通常由 checkpoint 自动决定，无需手动指定）
+    python3 python/infer.py --checkpoint checkpoints/best_model.pt --log-target
+    python3 python/infer.py --checkpoint checkpoints/best_model.pt --no-log-target
 """
 
 import argparse
@@ -56,7 +73,7 @@ import torch
 from device_utils import resolve_device
 from model_factory import INFER_MODEL_CHOICES, build_model, get_model_kwargs
 from train import (TUNED_CONFIGS, apply_tuned_config, DEFAULT_PAIRS,
-                   derive_config_path, load_model_config)
+                   derive_config_path, load_model_config, detect_label_mechanism)
 
 # 复用 build_dataset 的特征提取逻辑
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -84,13 +101,19 @@ def load_model(checkpoint_path: Path, device,
 
 
 def judge(y_hat: float, v1_name: str = "v1", v2_name: str = "v2") -> str:
-    """根据预测加速比 Ŷ 输出判断结论。"""
+    """根据预测加速比 Ŷ 输出判断结论。
+
+    百分比使用"节省时间比" (1 - 1/Y) × 100，最大值 < 100%，双向对称：
+      Y = 2.0 → 快 50%（加速比 2.00x）
+      Y = 0.5 → 快 50%（加速比 2.00x，v2 更快）
+    避免 log-target 模式下 exp() 放大导致出现 >100% 的加速百分比。
+    """
     if y_hat > 1.05:
-        pct = (y_hat - 1.0) * 100
-        return f"{v1_name} 优于 {v2_name}（快 {pct:.1f}%）"
+        pct = (1.0 - 1.0 / y_hat) * 100   # 节省时间比，上界 < 100%
+        return f"{v1_name} 优于 {v2_name}（快 {pct:.1f}%，加速比 {y_hat:.2f}x）"
     elif y_hat < 0.95:
-        pct = (1.0 - y_hat) * 100
-        return f"{v2_name} 优于 {v1_name}（快 {pct:.1f}%）"
+        pct = (1.0 - y_hat) * 100          # 对称公式：(1 - 1/v2_speedup)×100
+        return f"{v2_name} 优于 {v1_name}（快 {pct:.1f}%，加速比 {1.0/y_hat:.2f}x）"
     else:
         return f"{v1_name} ≈ {v2_name}（差异在 ±5% 内）"
 
@@ -353,6 +376,16 @@ def main():
     parser.add_argument(
         "--config", type=Path, default=None,
         help="显式指定模型配置 JSON 文件路径（覆盖自动推导）")
+    # log-target 覆盖（默认 None 表示从 checkpoint/config 自动读取）
+    parser.add_argument(
+        "--log-target", dest="log_target_override",
+        action="store_true", default=None,
+        help="强制启用 log-target 模式（推理输出将执行 exp() 变换）；"
+             "通常无需手动指定，优先级低于 configs/ JSON，高于 checkpoint 元数据")
+    parser.add_argument(
+        "--no-log-target", dest="log_target_override",
+        action="store_false",
+        help="强制禁用 log-target 模式")
 
     # 1) 获取 argparse 原始默认值
     arg_defaults = vars(parser.parse_args(["--checkpoint", "dummy.pt"]))
@@ -365,7 +398,8 @@ def main():
     }
     # 4) 非 auto 模式：直接应用 auto-tune
     if args.auto_tune and args.model != "auto":
-        apply_tuned_config(args)
+        _tb = args.tensor_base or (args.project_root / "train_set" / "tensors" / "fixed_time")
+        apply_tuned_config(args, label_mechanism=detect_label_mechanism(_tb))
 
     try:
         device, resolved_device_name, device_message = resolve_device(args.device)
@@ -399,11 +433,12 @@ def main():
 
     logger = logging.getLogger(__name__)
 
-    # ── 解析模型配置 ──
-    # 优先级：config JSON > checkpoint 元数据 > auto-tune 预设 > argparse 默认值
+    # 解析模型配置 ──
+    # 优先级：config JSON > checkpoint 元数据 > auto-tune 预设 > argparse 默认値
     resolved_model_name = None
     resolved_model_kwargs = None
     resolved_log_target = None
+    ckpt_pair_swap: bool | None = None  # 仅用于日志透明度
 
     if args.model == "auto":
         # 1) 尝试从 configs/ 目录读取配置 JSON
@@ -424,6 +459,7 @@ def main():
             resolved_model_name = config["model_name"]
             resolved_model_kwargs = config["model_kwargs"]
             resolved_log_target = config.get("log_target", False)
+            ckpt_pair_swap = config.get("training_config", {}).get("pair_swap", None)
         else:
             # 2) 回退：从 checkpoint 文件读取元数据
             ckpt_meta = torch.load(
@@ -445,17 +481,30 @@ def main():
                 # 临时设置 args.model 以便 apply_tuned_config 工作
                 args.model = resolved_model_name
                 if args.auto_tune:
-                    apply_tuned_config(args)
+                    _tb = args.tensor_base or (
+                        args.project_root / "train_set" / "tensors" / "fixed_time")
+                    apply_tuned_config(
+                        args,
+                        label_mechanism=detect_label_mechanism(_tb))
                 resolved_model_kwargs = get_model_kwargs(
                     resolved_model_name,
                     in_features=args.in_features, args=args)
                 args.model = "auto"  # 恢复
+
+            # 从 checkpoint 训练配置中读取 pair_swap（仅用于日志透明度）
+            ckpt_pair_swap = ckpt_meta.get("training_config", {}).get("pair_swap", None)
+            if ckpt_pair_swap is None:
+                ckpt_pair_swap = ckpt_meta.get("pair_swap", None)
 
     else:
         # 显式指定模型类型
         resolved_model_name = args.model
         resolved_model_kwargs = get_model_kwargs(
             args.model, in_features=args.in_features, args=args)
+
+    # 命令行显式 --log-target / --no-log-target 优先级最高（仅在非 None 时覆盖）
+    if args.log_target_override is not None:
+        resolved_log_target = args.log_target_override
 
     model, resolved_model_name, resolved_model_kwargs, log_target = load_model(
         args.checkpoint,
@@ -469,6 +518,9 @@ def main():
     logging.getLogger(__name__).info("模型参数: %s", resolved_model_kwargs)
     if log_target:
         logging.getLogger(__name__).info("log-target 模式: 推理时将自动应用 exp() 变换")
+    if ckpt_pair_swap is not None:
+        logging.getLogger(__name__).info(
+            "pair-swap 训练增强: %s（此为训练时数据增强，不影响推理逻辑）", ckpt_pair_swap)
 
     # ── CSV 模式 ──
     if args.csv_v1 and args.csv_v2:
