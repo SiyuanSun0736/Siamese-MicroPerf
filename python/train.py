@@ -160,7 +160,7 @@ def apply_tuned_config(args: argparse.Namespace,
     """根据 --label-mechanism、--model 和 --pairs 将 TUNED_CONFIGS 中的预设写入 args。
 
     覆盖优先级：命令行显式值 > 标签对专属配置 > 模型默认配置 > argparse 默认值。
-    当使用多组标签对混合训练时，取各对训练超参的保守合并（数值参数取均值，布尔参数取 OR）。
+    仅当训练单一标签对时应用该对的专属覆写；多对混合训练时只使用 _default。
     若指定的 label_mechanism 不在 TUNED_CONFIGS 中，回退到 fixed_time。
     """
     model_name = args.model
@@ -186,28 +186,13 @@ def apply_tuned_config(args: argparse.Namespace,
     base = dict(training_cfg["_default"])
 
     pair_names = args.pairs or DEFAULT_PAIRS
-    # 收集每个标签对的覆写
-    per_pair_overrides: list[dict] = []
-    for pname in pair_names:
-        if pname in training_cfg:
-            per_pair_overrides.append(training_cfg[pname])
+    # 仅当恰好训练单一标签对时，应用该对的专属覆写
+    per_pair_override: dict = {}
+    if len(pair_names) == 1 and pair_names[0] in training_cfg:
+        per_pair_override = training_cfg[pair_names[0]]
 
-    # 合并标签对专属覆写：数值取均值，布尔取 OR
-    merged_override: dict = {}
-    if per_pair_overrides:
-        all_keys = {k for d in per_pair_overrides for k in d}
-        for key in all_keys:
-            vals = [d[key] for d in per_pair_overrides if key in d]
-            if isinstance(vals[0], bool):
-                merged_override[key] = any(vals)
-            elif isinstance(vals[0], (int, float)):
-                merged_override[key] = sum(vals) / len(vals)
-                # 如果原始类型是 int，四舍五入回 int
-                if isinstance(vals[0], int):
-                    merged_override[key] = round(merged_override[key])
-
-    # base + merged_override = 最终预设
-    final = {**base, **merged_override}
+    # base + per_pair_override = 最终预设
+    final = {**base, **per_pair_override}
 
     for key, val in final.items():
         if key.startswith("_"):
