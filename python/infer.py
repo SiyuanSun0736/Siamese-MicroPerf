@@ -504,10 +504,31 @@ def main():
                 ckpt_pair_swap = ckpt_meta.get("pair_swap", None)
 
     else:
-        # 显式指定模型类型
-        resolved_model_name = args.model
-        resolved_model_kwargs = get_model_kwargs(
-            args.model, in_features=args.in_features, args=args)
+        # 显式指定模型类型，但仍优先检查 configs/ JSON 以获取架构超参
+        config_dir = args.config_dir or (args.project_root / "configs")
+        config = None
+        if args.config:
+            config = load_model_config(args.config)
+            if config:
+                logger.info("从指定配置文件加载: %s", args.config)
+        else:
+            auto_config_path = derive_config_path(
+                args.checkpoint, args.project_root, config_dir)
+            config = load_model_config(auto_config_path)
+            if config and config.get("model_name") == args.model:
+                logger.info("从配置文件获取模型架构超参: %s", auto_config_path)
+            else:
+                config = None  # 不存在或模型类型不匹配，忽略
+
+        if config:
+            resolved_model_name = args.model
+            resolved_model_kwargs = config["model_kwargs"]
+            resolved_log_target = config.get("log_target", False)
+            ckpt_pair_swap = config.get("training_config", {}).get("pair_swap", None)
+        else:
+            resolved_model_name = args.model
+            resolved_model_kwargs = get_model_kwargs(
+                args.model, in_features=args.in_features, args=args)
 
     # 命令行显式 --log-target / --no-log-target 优先级最高（仅在非 None 时覆盖）
     if args.log_target_override is not None:
