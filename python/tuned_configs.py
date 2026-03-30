@@ -40,21 +40,26 @@ TUNED_CONFIGS: dict[str, dict[str, dict]] = {
     # ============================================================
     "fixed_time": {
         "cnn": {
-            "model": _CNN_MODEL,
+            "model": {
+                "cnn_hidden": 128,
+                "cnn_out": 256,
+                "mlp_hidden": 256,
+                "dropout": 0.25,
+            },
             "training": {
                 "_default": {
-                    "lr": 1e-3,
+                    "lr": 3e-4,
                     "weight_decay": 1e-4,
                     "batch_size": 32,
-                    "epochs": 150,
-                    "patience": 30,
-                    "warmup_epochs": 10,
-                    "huber_delta": 1.0,
+                    "epochs": 180,
+                    "patience": 50,
+                    "warmup_epochs": 15,
+                    "huber_delta": 0.01,
                     "grad_clip": 1.0,
-                    "noise_std": 0.05,
-                    "direction_lambda": 0.0,
-                    "pair_swap": False,
-                    "log_target": False,
+                    "noise_std": 0.01,
+                    "direction_lambda": 0.5,
+                    "pair_swap": True,
+                    "log_target": True,
                 },
                 "O1-g_vs_O3-g": {
                     "huber_delta": 1.5,
