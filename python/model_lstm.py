@@ -115,7 +115,11 @@ class LSTMBackbone(nn.Module):
         # 输入投影: (batch, T, D) → (batch, T, lstm_hidden)
         x = self.input_proj(x)
 
-        if valid_len is not None:
+        # DirectML 不支持 pack_padded_sequence 所触发的 _thnn_fused_lstm_cell
+        # 在 DirectML 设备上直接运行 LSTM（变长掩码由 AttentionPooling 的 valid_len 处理）
+        use_pack = (valid_len is not None and
+                    x.device.type != 'privateuseone')
+        if use_pack:
             # 使用 pack_padded_sequence 高效处理变长序列
             # enforce_sorted=False 允许未排序的序列长度
             lengths_cpu = valid_len.clamp(min=1).cpu()

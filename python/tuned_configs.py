@@ -145,7 +145,7 @@ TUNED_CONFIGS: dict[str, dict[str, dict]] = {
                 "O2-bolt_vs_O2-bolt-opt": {
                     "huber_delta": 0.5,
                     "lr": 1.5e-4,
-                    "direction_lambda": 0.8,   # bolt 对差异小，方向更难学，保持较高权重
+                    "direction_lambda": 0.8,
                     "noise_std": 0.01,
                     "patience": 60,
                 },
@@ -298,21 +298,26 @@ TUNED_CONFIGS: dict[str, dict[str, dict]] = {
     # ============================================================
     "inst_retired": {
         "cnn": {
-            "model": _CNN_MODEL,
+            "model": {
+                "cnn_hidden": 64,
+                "cnn_out": 128,
+                "mlp_hidden": 128,
+                "dropout": 0.10,
+            },
             "training": {
                 "_default": {
                     "lr": 5e-4,
                     "weight_decay": 1e-4,
-                    "batch_size": 64,
-                    "epochs": 130,
-                    "patience": 25,
-                    "warmup_epochs": 20,
-                    "huber_delta": 0.8,
+                    "batch_size": 32,
+                    "epochs": 180,
+                    "patience": 50,
+                    "warmup_epochs": 15,
+                    "huber_delta": 0.05,
                     "grad_clip": 1.0,
-                    "noise_std": 0.03,
-                    "direction_lambda": 0.05,
-                    "pair_swap": False,
-                    "log_target": False,
+                    "noise_std": 0.005,
+                    "direction_lambda": 0.5,
+                    "pair_swap": True,
+                    "log_target": True,
                 },
                 "O1-g_vs_O3-g": {
                     "huber_delta": 1.2,
