@@ -117,36 +117,37 @@ TUNED_CONFIGS: dict[str, dict[str, dict]] = {
             "model": _TRANSFORMER_MODEL,
             "training": {
                 "_default": {
-                    "lr": 1e-3,
-                    "weight_decay": 1e-4,
+                    "lr": 3e-4,
+                    "weight_decay": 1e-3,      # v2 用 1e-4 易过拟合，v3 用 1e-2 太猛，折中 1e-3
                     "batch_size": 32,
                     "epochs": 200,
-                    "patience": 30,
-                    "warmup_epochs": 10,
+                    "patience": 50,
+                    "warmup_epochs": 20,
                     "huber_delta": 1.0,
                     "grad_clip": 1.0,
-                    "noise_std": 0.05,
-                    "direction_lambda": 0.0,
-                    "pair_swap": False,
-                    "log_target": False,
+                    "noise_std": 0.03,
+                    "direction_lambda": 0.5,   # 大幅加强方向损失权重，显式优化方向准确率
+                    "pair_swap": True,
+                    "log_target": True,
                 },
                 "O1-g_vs_O3-g": {
                     "huber_delta": 1.5,
                     "pair_swap": True,
                     "warmup_epochs": 25,
                     "noise_std": 0.03,
+                    "direction_lambda": 0.5,
                 },
                 "O2-bolt_vs_O2-bolt-opt": {
                     "huber_delta": 0.5,
                     "lr": 2e-4,
-                    "direction_lambda": 0.1,
+                    "direction_lambda": 0.3,   # bolt 对差异小，方向更难学，保持较高权重
                     "noise_std": 0.01,
                     "patience": 50,
                 },
                 "O3-bolt_vs_O3-bolt-opt": {
                     "huber_delta": 0.5,
                     "lr": 2e-4,
-                    "direction_lambda": 0.1,
+                    "direction_lambda": 0.3,
                     "noise_std": 0.01,
                     "patience": 50,
                 },
@@ -233,7 +234,16 @@ TUNED_CONFIGS: dict[str, dict[str, dict]] = {
             },
         },
         "transformer": {
-            "model": _TRANSFORMER_MODEL,
+            "model": {
+                    "d_model": 64,
+                    "nhead": 2,
+                    "num_layers": 3,
+                    "dim_feedforward": 256,
+                    "max_len": 512,
+                    "pos_encoding": "learnable",
+                    "mlp_hidden": 64,
+                    "dropout": 0.10,
+                },
             "training": {
                 "_default": {
                     "lr": 1e-3,

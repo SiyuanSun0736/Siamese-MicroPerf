@@ -108,11 +108,13 @@ def judge(y_hat: float, v1_name: str = "v1", v2_name: str = "v2") -> str:
       Y = 0.5 → 快 50%（加速比 2.00x，v2 更快）
     避免 log-target 模式下 exp() 放大导致出现 >100% 的加速百分比。
     """
+    # 安全钳位：比率在物理上恒正，防止异常负值/零值导致计算溢出
+    y_hat = max(y_hat, 1e-4)
     if y_hat > 1.05:
         pct = (1.0 - 1.0 / y_hat) * 100   # 节省时间比，上界 < 100%
         return f"{v1_name} 优于 {v2_name}（快 {pct:.1f}%，加速比 {y_hat:.2f}x）"
     elif y_hat < 0.95:
-        pct = (1.0 - y_hat) * 100          # 对称公式：(1 - 1/v2_speedup)×100
+        pct = (1.0 - 1.0 / (1.0 / y_hat)) * 100  # = (1 - y_hat) * 100，对称公式
         return f"{v2_name} 优于 {v1_name}（快 {pct:.1f}%，加速比 {1.0/y_hat:.2f}x）"
     else:
         return f"{v1_name} ≈ {v2_name}（差异在 ±5% 内）"
@@ -176,6 +178,9 @@ def infer_from_tensors(model, tensor_dir: Path, device: torch.device,
     if log_target:
         Y_hat = torch.exp(Y_hat)
         logging.getLogger(__name__).info("已应用 exp() 变换（log-target 模式）")
+
+    # 安全钳位：比率在物理上恒正，防止模型输出负值/极端值导致展示异常
+    Y_hat = Y_hat.clamp(min=1e-4)
 
     N = Y_hat.shape[0]
 
@@ -291,6 +296,8 @@ def infer_from_csv(model, csv_v1: Path, csv_v2: Path,
     if log_target:
         import math
         y_hat = math.exp(y_hat)
+    # 安全钳位：比率在物理上恒正
+    y_hat = max(y_hat, 1e-4)
     verdict = judge(y_hat, v1_name, v2_name)
 
     logging.info("%s", "=" * 60)
