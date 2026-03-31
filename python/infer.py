@@ -72,8 +72,8 @@ import torch
 
 from device_utils import resolve_device
 from model_factory import INFER_MODEL_CHOICES, build_model, get_model_kwargs
-from train import (TUNED_CONFIGS, apply_tuned_config, DEFAULT_PAIRS,
-                   derive_config_path, load_model_config, detect_label_mechanism)
+from config_utils import (TUNED_CONFIGS, apply_tuned_config, DEFAULT_PAIRS,
+                          derive_config_path, load_model_config, detect_label_mechanism)
 
 # 复用 build_dataset 的特征提取逻辑
 sys.path.insert(0, str(Path(__file__).resolve().parent))

@@ -5,6 +5,7 @@
 """
 
 LABEL_MECHANISMS = ("fixed_time", "fixed_work", "inst_retired")
+BOLT_OPT_VARIANTS = ("O2-bolt_vs_O2-bolt-opt", "O3-bolt_vs_O3-bolt-opt")
 
 # 模型架构参数（跨标签机制共享）
 _CNN_MODEL = {
@@ -32,6 +33,104 @@ _TRANSFORMER_MODEL = {
     "pos_encoding": "learnable",
     "mlp_hidden": 64,
     "dropout": 0.10,
+}
+
+# BOLT 优化对比共享覆盖（适用于 BOLT_OPT_VARIANTS 中所有变体）
+# 每个条目包含 model（模型架构覆盖）和 training（训练超参覆盖），空 {} 表示沿用默认。
+_BOLT_OPT = {
+    "fixed_time": {
+        "cnn": {
+            "model": {},
+            "training": {
+                "huber_delta": 0.5,
+                "lr": 8e-4,
+                "direction_lambda": 0.1,
+                "noise_std": 0.03,
+            },
+        },
+        "lstm": {
+            "model": {},
+            "training": {
+                "huber_delta": 0.5,
+                "lr": 3e-4,
+                "direction_lambda": 0.15,
+                "noise_std": 0.02,
+                "patience": 50,
+            },
+        },
+        "transformer": {
+            "model": {},
+            "training": {
+                "huber_delta": 0.3,
+                "lr": 3e-4,
+                "direction_lambda": 3.0,
+                "noise_std": 0.01,
+                "patience": 90,
+            },
+        },
+    },
+    "fixed_work": {
+        "cnn": {
+            "model": {},
+            "training": {
+                "huber_delta": 0.5,
+                "lr": 6e-4,
+                "direction_lambda": 0.15,
+                "noise_std": 0.02,
+            },
+        },
+        "lstm": {
+            "model": {},
+            "training": {
+                "huber_delta": 0.5,
+                "lr": 2e-4,
+                "direction_lambda": 0.20,
+                "noise_std": 0.01,
+                "patience": 55,
+            },
+        },
+        "transformer": {
+            "model": {},
+            "training": {
+                "huber_delta": 0.5,
+                "lr": 1.5e-4,
+                "direction_lambda": 0.15,
+                "noise_std": 0.008,
+                "patience": 55,
+            },
+        },
+    },
+    "inst_retired": {
+        "cnn": {
+            "model": {},
+            "training": {
+                "huber_delta": 0.4,
+                "lr": 8e-4,
+                "direction_lambda": 0.15,
+                "noise_std": 0.02,
+            },
+        },
+        "lstm": {
+            "model": {},
+            "training": {
+                "huber_delta": 0.4,
+                "lr": 3e-4,
+                "direction_lambda": 0.20,
+                "noise_std": 0.01,
+                "patience": 45,
+            },
+        },
+        "transformer": {
+            "model": {},
+            "training": {
+                "huber_delta": 0.4,
+                "lr": 1.5e-4,
+                "direction_lambda": 0.6,
+                "noise_std": 0.01,
+                "patience": 60,
+            },
+        },
+    },
 }
 
 TUNED_CONFIGS: dict[str, dict[str, dict]] = {
@@ -66,18 +165,6 @@ TUNED_CONFIGS: dict[str, dict[str, dict]] = {
                     "pair_swap": True,
                     "noise_std": 0.06,
                 },
-                "O2-bolt_vs_O2-bolt-opt": {
-                    "huber_delta": 0.5,
-                    "lr": 8e-4,
-                    "direction_lambda": 0.1,
-                    "noise_std": 0.03,
-                },
-                "O3-bolt_vs_O3-bolt-opt": {
-                    "huber_delta": 0.5,
-                    "lr": 8e-4,
-                    "direction_lambda": 0.1,
-                    "noise_std": 0.03,
-                },
             },
         },
         "lstm": {
@@ -109,47 +196,33 @@ TUNED_CONFIGS: dict[str, dict[str, dict]] = {
                     "pair_swap": True,
                     "noise_std": 0.04,
                 },
-                "O2-bolt_vs_O2-bolt-opt": {
-                    "huber_delta": 0.5,
-                    "lr": 3e-4,
-                    "direction_lambda": 0.15,
-                    "noise_std": 0.02,
-                    "patience": 50,
-                },
-                "O3-bolt_vs_O3-bolt-opt": {
-                    "huber_delta": 0.5,
-                    "lr": 3e-4,
-                    "direction_lambda": 0.15,
-                    "noise_std": 0.02,
-                    "patience": 50,
-                },
             },
         },
         "transformer": {
             "model": {
                     "d_model": 64,
-                    "nhead": 4,
-                    "num_layers": 2,
-                    "dim_feedforward": 128,
-                    "max_len": 64,
+                    "nhead": 2,
+                    "num_layers": 3,
+                    "dim_feedforward": 256,
+                    "max_len": 512,
                     "pos_encoding": "learnable",
                     "mlp_hidden": 64,
-                    "dropout": 0.12,
+                    "dropout": 0.1,
                 },
             "training": {
                 "_default": {
-                    "lr": 5e-4,
-                    "weight_decay": 1e-3,
-                    "batch_size": 16,
+                    "lr": 1e-3,
+                    "weight_decay": 1e-4,
+                    "batch_size": 32,
                     "epochs": 400,
                     "patience": 80,
-                    "warmup_epochs": 15,
-                    "huber_delta": 0.1,
+                    "warmup_epochs": 10,
+                    "huber_delta": 1.0,
                     "grad_clip": 1.0,
-                    "noise_std": 0.02,
-                    "direction_lambda": 2.0,
-                    "pair_swap": True,
-                    "log_target": True,
+                    "noise_std": 0.05,
+                    "direction_lambda": 0.0,
+                    "pair_swap": False,
+                    "log_target": False,
                 },
                 "O1-g_vs_O3-g": {
                     "huber_delta": 1.0,
@@ -157,20 +230,6 @@ TUNED_CONFIGS: dict[str, dict[str, dict]] = {
                     "warmup_epochs": 20,
                     "noise_std": 0.01,
                     "direction_lambda": 1.5,
-                },
-                "O2-bolt_vs_O2-bolt-opt": {
-                    "huber_delta": 0.3,
-                    "lr": 3e-4,
-                    "direction_lambda": 3.0,
-                    "noise_std": 0.01,
-                    "patience": 90,
-                },
-                "O3-bolt_vs_O3-bolt-opt": {
-                    "huber_delta": 0.3,
-                    "lr": 3e-4,
-                    "direction_lambda": 3.0,
-                    "noise_std": 0.01,
-                    "patience": 90,
                 },
             },
         },
@@ -207,18 +266,6 @@ TUNED_CONFIGS: dict[str, dict[str, dict]] = {
                     "pair_swap": True,
                     "noise_std": 0.04,
                 },
-                "O2-bolt_vs_O2-bolt-opt": {
-                    "huber_delta": 0.5,
-                    "lr": 6e-4,
-                    "direction_lambda": 0.15,
-                    "noise_std": 0.02,
-                },
-                "O3-bolt_vs_O3-bolt-opt": {
-                    "huber_delta": 0.5,
-                    "lr": 6e-4,
-                    "direction_lambda": 0.15,
-                    "noise_std": 0.02,
-                },
             },
         },
         "lstm": {
@@ -249,20 +296,6 @@ TUNED_CONFIGS: dict[str, dict[str, dict]] = {
                     "huber_delta": 1.5,
                     "pair_swap": True,
                     "noise_std": 0.03,
-                },
-                "O2-bolt_vs_O2-bolt-opt": {
-                    "huber_delta": 0.5,
-                    "lr": 2e-4,
-                    "direction_lambda": 0.20,
-                    "noise_std": 0.01,
-                    "patience": 55,
-                },
-                "O3-bolt_vs_O3-bolt-opt": {
-                    "huber_delta": 0.5,
-                    "lr": 2e-4,
-                    "direction_lambda": 0.20,
-                    "noise_std": 0.01,
-                    "patience": 55,
                 },
             },
         },
@@ -297,20 +330,6 @@ TUNED_CONFIGS: dict[str, dict[str, dict]] = {
                     "pair_swap": True,
                     "warmup_epochs": 28,
                     "noise_std": 0.02,
-                },
-                "O2-bolt_vs_O2-bolt-opt": {
-                    "huber_delta": 0.5,
-                    "lr": 1.5e-4,
-                    "direction_lambda": 0.15,
-                    "noise_std": 0.008,
-                    "patience": 55,
-                },
-                "O3-bolt_vs_O3-bolt-opt": {
-                    "huber_delta": 0.5,
-                    "lr": 1.5e-4,
-                    "direction_lambda": 0.15,
-                    "noise_std": 0.008,
-                    "patience": 55,
                 },
             },
         },
@@ -347,18 +366,6 @@ TUNED_CONFIGS: dict[str, dict[str, dict]] = {
                     "pair_swap": True,
                     "noise_std": 0.04,
                 },
-                "O2-bolt_vs_O2-bolt-opt": {
-                    "huber_delta": 0.4,
-                    "lr": 8e-4,
-                    "direction_lambda": 0.15,
-                    "noise_std": 0.02,
-                },
-                "O3-bolt_vs_O3-bolt-opt": {
-                    "huber_delta": 0.4,
-                    "lr": 8e-4,
-                    "direction_lambda": 0.15,
-                    "noise_std": 0.02,
-                },
             },
         },
         "lstm": {
@@ -389,20 +396,6 @@ TUNED_CONFIGS: dict[str, dict[str, dict]] = {
                     "huber_delta": 1.2,
                     "pair_swap": True,
                     "noise_std": 0.03,
-                },
-                "O2-bolt_vs_O2-bolt-opt": {
-                    "huber_delta": 0.4,
-                    "lr": 3e-4,
-                    "direction_lambda": 0.20,
-                    "noise_std": 0.01,
-                    "patience": 45,
-                },
-                "O3-bolt_vs_O3-bolt-opt": {
-                    "huber_delta": 0.4,
-                    "lr": 3e-4,
-                    "direction_lambda": 0.20,
-                    "noise_std": 0.01,
-                    "patience": 45,
                 },
             },
         },
@@ -439,21 +432,17 @@ TUNED_CONFIGS: dict[str, dict[str, dict]] = {
                     "noise_std": 0.02,
                     "direction_lambda": 0.8,
                 },
-                "O2-bolt_vs_O2-bolt-opt": {
-                    "huber_delta": 0.4,
-                    "lr": 1.5e-4,
-                    "direction_lambda": 0.6,
-                    "noise_std": 0.01,
-                    "patience": 60,
-                },
-                "O3-bolt_vs_O3-bolt-opt": {
-                    "huber_delta": 0.4,
-                    "lr": 1.5e-4,
-                    "direction_lambda": 0.6,
-                    "noise_std": 0.01,
-                    "patience": 60,
-                },
             },
         },
     },
 }
+
+# 将 _BOLT_OPT 中的共享覆盖填充到所有 BOLT_OPT_VARIANTS
+for _lm in LABEL_MECHANISMS:
+    for _arch in ("cnn", "lstm", "transformer"):
+        _bolt_cfg = _BOLT_OPT[_lm][_arch]
+        for _variant in BOLT_OPT_VARIANTS:
+            TUNED_CONFIGS[_lm][_arch]["training"][_variant] = _bolt_cfg["training"]
+            if _bolt_cfg.get("model"):
+                TUNED_CONFIGS[_lm][_arch].setdefault(
+                    "model_overrides", {})[_variant] = _bolt_cfg["model"]
