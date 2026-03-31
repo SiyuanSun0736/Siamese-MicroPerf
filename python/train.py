@@ -531,6 +531,13 @@ def main():
         print(f"[ERROR] {exc}", file=sys.stderr)
         sys.exit(1)
 
+    # nn.LSTM 在 DirectML 上不可用（_thnn_fused_lstm_cell 无 CPU 回退实现），
+    # LSTM 模型自动降级到 CPU 运行。
+    if args.model == "lstm" and str(device).startswith("privateuseone"):
+        device = torch.device("cpu")
+        resolved_device_name = "cpu"
+        device_message = "[LSTM] DirectML 不支持 nn.LSTM，已自动回退到 CPU"
+
     # 配置日志：写入 project_root/log/train_YYYYmmdd_HHMMSS.log
     log_dir = args.project_root / "log"
     log_dir.mkdir(parents=True, exist_ok=True)

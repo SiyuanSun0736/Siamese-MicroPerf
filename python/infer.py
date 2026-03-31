@@ -534,6 +534,12 @@ def main():
     if args.log_target_override is not None:
         resolved_log_target = args.log_target_override
 
+    # nn.LSTM 在 DirectML 上不可用，LSTM 模型自动降级到 CPU 运行。
+    if resolved_model_name == "lstm" and str(device).startswith("privateuseone"):
+        device = torch.device("cpu")
+        logging.getLogger(__name__).info(
+            "[LSTM] DirectML 不支持 nn.LSTM，已自动回退到 CPU")
+
     model, resolved_model_name, resolved_model_kwargs, log_target = load_model(
         args.checkpoint,
         device,
