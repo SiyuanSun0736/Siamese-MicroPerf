@@ -1,0 +1,51 @@
+{
+  "model_name": "lstm",
+  "model_kwargs": {
+    "in_features": 6,
+    "mlp_hidden": 32,
+    "dropout": 0.2,
+    "lstm_hidden": 32,
+    "lstm_out": 64,
+    "num_layers": 2,
+    "bidirectional": true
+  },
+  "log_target": true,
+  "checkpoint": "checkpoints/lstm_best_work.pt",
+  "training_config": {
+    "label_mechanism": "fixed_work",
+    "auto_tune": true,
+    "explicitly_set": [
+      "model",
+      "output_model",
+      "tensor_base"
+    ],
+    "tensor_base": "train_set/tensors/fixed_work",
+    "pairs": [
+      "O1-g_vs_O3-g",
+      "O2-bolt_vs_O2-bolt-opt",
+      "O3-bolt_vs_O3-bolt-opt"
+    ],
+    "device": "cpu",
+    "seed": 42,
+    "val_ratio": 0.15,
+    "test_ratio": 0.15,
+    "epochs": 200,
+    "batch_size": 32,
+    "lr": 0.0005,
+    "weight_decay": 0.001,
+    "huber_delta": 0.05,
+    "patience": 50,
+    "grad_clip": 1.0,
+    "noise_std": 0.01,
+    "warmup_epochs": 15,
+    "log_target": true,
+    "direction_lambda": 0.3,
+    "pair_swap": true,
+    "optimizer": "Adam",
+    "scheduler": {
+      "name": "LambdaLR",
+      "warmup": "linear",
+      "decay": "cosine"
+    }
+  }
+}

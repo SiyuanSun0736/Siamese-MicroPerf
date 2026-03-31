@@ -1,0 +1,92 @@
+2026-03-30 19:23:34,438 INFO: 自动选择设备: directml
+2026-03-30 19:23:34,438 INFO: 设备: privateuseone:0
+2026-03-30 19:23:34,438 INFO: 标签机制: inst_retired
+2026-03-30 19:23:34,438 INFO: 自动微调 [inst_retired/transformer]: batch_size=32, d_model=64, dim_feedforward=256, direction_lambda=0.0, dropout=0.1, epochs=220, grad_clip=1.0, huber_delta=1.0, log_target=False, lr=0.001, max_len=512, mlp_hidden=64, nhead=2, noise_std=0.05, num_layers=3, pair_swap=False, patience=30, pos_encoding=learnable, warmup_epochs=10, weight_decay=0.0001
+2026-03-30 19:23:34,439 INFO: 加载数据...
+2026-03-30 19:23:34,448 INFO:   加载 O1-g_vs_O3-g: 174 样本
+2026-03-30 19:23:34,456 INFO:   加载 O2-bolt_vs_O2-bolt-opt: 174 样本
+2026-03-30 19:23:34,472 INFO:   加载 O3-bolt_vs_O3-bolt-opt: 174 样本
+2026-03-30 19:23:34,474 INFO: 总样本数: 522  序列长度 T=60  特征维度 D=6
+2026-03-30 19:23:34,476 INFO: 训练集: 366  验证集: 78  测试集: 78
+2026-03-30 19:23:34,617 INFO: 模型类型: transformer
+2026-03-30 19:23:34,617 INFO: 
+模型参数: 197,825
+2026-03-30 19:23:34,617 INFO: SiameseTransformerMicroPerf(
+  (backbone): TransformerBackbone(
+    (input_proj): Linear(in_features=6, out_features=64, bias=True)
+    (pos_encoder): LearnablePositionalEncoding(
+      (dropout): Dropout(p=0.1, inplace=False)
+    )
+    (transformer_encoder): TransformerEncoder(
+      (layers): ModuleList(
+        (0-2): 3 x TransformerEncoderLayer(
+          (self_attn): MultiheadAttention(
+            (out_proj): NonDynamicallyQuantizableLinear(in_features=64, out_features=64, bias=True)
+          )
+          (linear1): Linear(in_features=64, out_features=256, bias=True)
+          (dropout): Dropout(p=0.1, inplace=False)
+          (linear2): Linear(in_features=256, out_features=64, bias=True)
+          (norm1): LayerNorm((64,), eps=1e-05, elementwise_affine=True)
+          (norm2): LayerNorm((64,), eps=1e-05, elementwise_affine=True)
+          (dropout1): Dropout(p=0.1, inplace=False)
+          (dropout2): Dropout(p=0.1, inplace=False)
+        )
+      )
+      (norm): LayerNorm((64,), eps=1e-05, elementwise_affine=True)
+    )
+  )
+  (pool): AttentionPooling(
+    (attention): Linear(in_features=64, out_features=1, bias=False)
+  )
+  (mlp): Sequential(
+    (0): Linear(in_features=192, out_features=64, bias=True)
+    (1): ReLU()
+    (2): Dropout(p=0.1, inplace=False)
+    (3): Linear(in_features=64, out_features=32, bias=True)
+    (4): ReLU()
+    (5): Dropout(p=0.1, inplace=False)
+    (6): Linear(in_features=32, out_features=1, bias=True)
+  )
+)
+2026-03-30 19:23:35,278 INFO: 模型保存路径: checkpoints/transformer_best_inst.pt
+2026-03-30 19:23:35,279 INFO: 配置保存路径: /home/ssy/Siamese-MicroPerf/configs/transformer_best_inst.json
+2026-03-30 19:23:35,279 INFO: 
+开始训练 (220 epochs, Huber δ=1.0, patience=30)...
+2026-03-30 19:23:35,279 INFO: Epoch   Train Loss   Val Loss    Val MAE    LR          Status
+2026-03-30 19:23:35,279 INFO: ----------------------------------------------------------------------
+2026-03-30 19:23:37,391 INFO:      1     0.513370    0.413370     0.8988    2.00e-04  ← best
+2026-03-30 19:23:39,405 INFO:      2     0.275447    0.131332     0.4604    3.00e-04  ← best
+2026-03-30 19:23:41,317 INFO:      3     0.066074    0.028023     0.1944    4.00e-04  ← best
+2026-03-30 19:23:43,293 INFO:      4     0.030638    0.018322     0.0952    5.00e-04  ← best
+2026-03-30 19:23:45,254 INFO:      5     0.024165    0.012050     0.0984    6.00e-04  ← best
+2026-03-30 19:23:47,196 INFO:      6     0.023326    0.010804     0.0726    7.00e-04  ← best
+2026-03-30 19:23:49,180 INFO:      7     0.019769    0.009925     0.0939    8.00e-04  ← best
+2026-03-30 19:23:51,032 INFO:      8     0.019948    0.008297     0.0767    9.00e-04  ← best
+2026-03-30 19:23:54,778 INFO:     10     0.018341    0.006504     0.0719    1.00e-03  ← best
+2026-03-30 19:23:59,591 INFO:     13     0.015952    0.005917     0.0568    9.99e-04  ← best
+2026-03-30 19:24:05,059 INFO:     16     0.016004    0.005113     0.0597    9.98e-04  ← best
+2026-03-30 19:24:10,554 INFO:     19     0.016055    0.005026     0.0588    9.95e-04  ← best
+2026-03-30 19:24:12,513 INFO:     20     0.015325    0.008568     0.0694    9.94e-04  
+2026-03-30 19:24:31,063 INFO:     30     0.013299    0.008194     0.0612    9.78e-04  
+2026-03-30 19:24:49,017 INFO:     40     0.009085    0.005165     0.0553    9.50e-04  
+2026-03-30 19:25:05,398 INFO: 
+早停触发: 验证 loss 连续 30 epoch 未改善
+2026-03-30 19:25:05,799 INFO: ============================================================
+2026-03-30 19:25:05,799 INFO: 最佳模型 (epoch 19)
+2026-03-30 19:25:05,800 INFO:   Val  Loss = 0.005026  MAE = 0.0588  (模型选择依据)
+2026-03-30 19:25:05,800 INFO:   Test Loss = 0.007474  MAE = 0.0711  (最终无偏评估)
+2026-03-30 19:25:05,800 INFO:   模型保存: checkpoints/transformer_best_inst.pt
+2026-03-30 19:25:05,800 INFO:   配置保存: /home/ssy/Siamese-MicroPerf/configs/transformer_best_inst.json
+2026-03-30 19:25:05,800 INFO: 
+预测示例 (前 10 个测试样本):
+2026-03-30 19:25:05,800 INFO:         真实 Y        预测 Ŷ          误差
+2026-03-30 19:25:05,801 INFO:       0.9227      1.0296     +0.1069
+2026-03-30 19:25:05,801 INFO:       0.9964      1.0241     +0.0277
+2026-03-30 19:25:05,801 INFO:       1.0532      1.0404     -0.0128
+2026-03-30 19:25:05,801 INFO:       1.4450      1.4156     -0.0294
+2026-03-30 19:25:05,801 INFO:       1.0027      0.8546     -0.1481
+2026-03-30 19:25:05,801 INFO:       1.4066      1.7445     +0.3378
+2026-03-30 19:25:05,802 INFO:       0.9162      1.0409     +0.1247
+2026-03-30 19:25:05,802 INFO:       0.9651      1.0406     +0.0754
+2026-03-30 19:25:05,802 INFO:       1.0006      1.0219     +0.0213
+2026-03-30 19:25:05,802 INFO:       0.9942      1.0050     +0.0107

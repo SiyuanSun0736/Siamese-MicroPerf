@@ -1,0 +1,53 @@
+{
+  "model_name": "transformer",
+  "model_kwargs": {
+    "in_features": 6,
+    "mlp_hidden": 64,
+    "dropout": 0.1,
+    "d_model": 64,
+    "nhead": 2,
+    "num_layers": 3,
+    "dim_feedforward": 256,
+    "max_len": 512,
+    "pos_encoding": "learnable"
+  },
+  "log_target": false,
+  "checkpoint": "checkpoints/transformer_best_work.pt",
+  "training_config": {
+    "label_mechanism": "fixed_work",
+    "auto_tune": true,
+    "explicitly_set": [
+      "model",
+      "output_model",
+      "tensor_base"
+    ],
+    "tensor_base": "train_set/tensors/fixed_work",
+    "pairs": [
+      "O1-g_vs_O3-g",
+      "O2-bolt_vs_O2-bolt-opt",
+      "O3-bolt_vs_O3-bolt-opt"
+    ],
+    "device": "directml",
+    "seed": 42,
+    "val_ratio": 0.15,
+    "test_ratio": 0.15,
+    "epochs": 220,
+    "batch_size": 32,
+    "lr": 0.001,
+    "weight_decay": 0.0001,
+    "huber_delta": 1.0,
+    "patience": 30,
+    "grad_clip": 1.0,
+    "noise_std": 0.05,
+    "warmup_epochs": 10,
+    "log_target": false,
+    "direction_lambda": 0.0,
+    "pair_swap": false,
+    "optimizer": "Adam",
+    "scheduler": {
+      "name": "LambdaLR",
+      "warmup": "linear",
+      "decay": "cosine"
+    }
+  }
+}

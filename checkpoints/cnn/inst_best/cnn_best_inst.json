@@ -1,0 +1,48 @@
+{
+  "model_name": "cnn",
+  "model_kwargs": {
+    "in_features": 6,
+    "mlp_hidden": 128,
+    "dropout": 0.1,
+    "cnn_hidden": 64,
+    "cnn_out": 128
+  },
+  "log_target": false,
+  "checkpoint": "checkpoints/cnn_best_inst.pt",
+  "training_config": {
+    "label_mechanism": "inst_retired",
+    "auto_tune": true,
+    "explicitly_set": [
+      "output_model",
+      "tensor_base"
+    ],
+    "tensor_base": "train_set/tensors/inst_retired",
+    "pairs": [
+      "O1-g_vs_O3-g",
+      "O2-bolt_vs_O2-bolt-opt",
+      "O3-bolt_vs_O3-bolt-opt"
+    ],
+    "device": "directml",
+    "seed": 42,
+    "val_ratio": 0.15,
+    "test_ratio": 0.15,
+    "epochs": 180,
+    "batch_size": 32,
+    "lr": 0.0005,
+    "weight_decay": 0.0001,
+    "huber_delta": 0.05,
+    "patience": 50,
+    "grad_clip": 1.0,
+    "noise_std": 0.005,
+    "warmup_epochs": 15,
+    "log_target": false,
+    "direction_lambda": 0.5,
+    "pair_swap": false,
+    "optimizer": "Adam",
+    "scheduler": {
+      "name": "LambdaLR",
+      "warmup": "linear",
+      "decay": "cosine"
+    }
+  }
+}

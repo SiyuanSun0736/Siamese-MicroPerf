@@ -1,0 +1,551 @@
+2026-03-31 14:22:07,135 INFO: 自动选择设备: directml
+2026-03-31 14:22:07,135 INFO: 设备: privateuseone:0
+2026-03-31 14:22:07,136 INFO: 设备类型: directml
+2026-03-31 14:22:07,136 INFO: 从配置文件自动加载: /home/ssy/Siamese-MicroPerf/configs/lstm_best_time.json
+2026-03-31 14:22:07,136 INFO: [LSTM] DirectML 不支持 nn.LSTM，已自动回退到 CPU
+2026-03-31 14:22:07,142 INFO: 模型加载完成: checkpoints/lstm_best_time.pt  (设备: cpu)
+2026-03-31 14:22:07,143 INFO: 模型类型: lstm
+2026-03-31 14:22:07,143 INFO: 模型参数: {'in_features': 6, 'mlp_hidden': 32, 'dropout': 0.2, 'lstm_hidden': 32, 'lstm_out': 64, 'num_layers': 2, 'bidirectional': True}
+2026-03-31 14:22:07,143 INFO: log-target 模式: 推理时将自动应用 exp() 变换
+2026-03-31 14:22:07,143 INFO: pair-swap 训练增强: True（此为训练时数据增强，不影响推理逻辑）
+2026-03-31 14:22:07,239 INFO: 已应用 exp() 变换（log-target 模式）
+2026-03-31 14:22:07,239 INFO: ========================================================================
+2026-03-31 14:22:07,239 INFO: 版本对: O1-g_vs_O3-g  (O1-g vs O3-g)  共 163 个程序
+2026-03-31 14:22:07,240 INFO: 标签模式: fixed_time
+2026-03-31 14:22:07,240 INFO: 标签定义: Y = N_v1 / N_v2 (throughput ratio in a fixed window)
+2026-03-31 14:22:07,240 INFO: 判定方向: Y > 1 视为 O1-g 更快，Y < 1 视为 O3-g 更快
+2026-03-31 14:22:07,240 INFO: ========================================================================
+2026-03-31 14:22:07,240 INFO:      #                              程序      预测 Ŷ      真实 Y        误差  判断
+2026-03-31 14:22:07,240 INFO:   ------------------------------------------------------------------------
+2026-03-31 14:22:07,240 INFO:      1                            7zip    0.9999    1.0000   -0.0001  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,240 INFO:      2             ASCI_Purple_SMG2000    0.9981    0.8750   +0.1231  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,241 INFO:      3               ASC_Sequoia_AMGmk    0.9967    0.6667   +0.3300  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,241 INFO:      4           ASC_Sequoia_CrystalMk    0.9981    0.9286   +0.0695  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,241 INFO:      5               ASC_Sequoia_IRSmk    1.0000    0.6667   +0.3334  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,241 INFO:      6                  BitBench_drop3    1.0004    0.9941   +0.0063  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,241 INFO:      7                 BitBench_five11    1.0002    1.0526   -0.0525  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,241 INFO:      8               BitBench_uudecode    1.0029    0.2875   +0.7155  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,241 INFO:      9               BitBench_uuencode    0.9993    0.9551   +0.0442  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,242 INFO:     10                          Bullet    1.0003    0.9091   +0.0912  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,242 INFO:     11         DOE-ProxyApps-C++_CLAMR    1.0003    1.0323   -0.0320  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,242 INFO:     12   DOE-ProxyApps-C++_HACCKernels    0.9963    0.9524   +0.0439  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,242 INFO:     13         DOE-ProxyApps-C++_HPCCG    0.9974    1.0000   -0.0026  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,243 INFO:     14       DOE-ProxyApps-C++_PENNANT    1.0003    0.8929   +0.1075  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,243 INFO:     15        DOE-ProxyApps-C++_miniFE    0.9981    0.9167   +0.0814  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,243 INFO:     16            DOE-ProxyApps-C_CoMD    0.9983    0.9565   +0.0418  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,243 INFO:     17      DOE-ProxyApps-C_Pathfinder    1.0002    1.0000   +0.0002  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,243 INFO:     18         DOE-ProxyApps-C_RSBench    0.9988    0.9925   +0.0063  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,243 INFO:     19       DOE-ProxyApps-C_SimpleMOC    0.9982    0.7812   +0.2169  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,244 INFO:     20         DOE-ProxyApps-C_XSBench    0.9993    0.9333   +0.0660  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,244 INFO:     21         DOE-ProxyApps-C_miniAMR    0.9993    0.9138   +0.0855  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,244 INFO:     22         DOE-ProxyApps-C_miniGMG    0.9993    0.9048   +0.0946  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,244 INFO:     23                     Fhourstones    0.9988    0.9455   +0.0534  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,244 INFO:     24                 Fhourstones-3.1    1.0000    1.0000   +0.0000  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,244 INFO:     25              FreeBench_analyzer    0.9998    0.9750   +0.0248  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,244 INFO:     26               FreeBench_distray    0.9993    0.9388   +0.0606  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,244 INFO:     27            FreeBench_fourinarow    0.9901    1.2857   -0.2956  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,244 INFO:     28                 FreeBench_mason    1.0000    1.0817   -0.0817  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,244 INFO:     29                FreeBench_neural    0.9978    1.0027   -0.0049  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,244 INFO:     30            FreeBench_pcompress2    1.0000    0.9608   +0.0392  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,244 INFO:     31                 FreeBench_pifft    1.0004    0.9231   +0.0773  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,245 INFO:     32               MallocBench_cfrac    0.9997    0.9811   +0.0185  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,245 INFO:     33            MallocBench_espresso    1.0001    0.9739   +0.0262  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,245 INFO:     34                  MallocBench_gs    0.9998    1.1541   -0.1543  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,245 INFO:     35                 McCat_01-qbsort    1.0002    1.0325   -0.0323  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,245 INFO:     36               McCat_03-testtrie    1.0001    0.9914   +0.0087  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,245 INFO:     37                 McCat_04-bisect    0.9999    0.9159   +0.0840  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,245 INFO:     38                   McCat_08-main    1.0005    1.0151   -0.0146  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,245 INFO:     39                    McCat_09-vor    1.0005    0.9895   +0.0110  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,246 INFO:     40                 McCat_12-IOtest    1.0001    1.0068   -0.0067  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,246 INFO:     41                   McCat_15-trie    1.0001    1.0027   -0.0026  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,246 INFO:     42                  McCat_17-bintr    1.0026    1.0000   +0.0026  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,246 INFO:     43                    McCat_18-imp    0.9998    0.9877   +0.0121  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,246 INFO:     44    MiBench_automotive-basicmath    1.0000    1.0000   +0.0000  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,246 INFO:     45     MiBench_automotive-bitcount    0.9998    0.9595   +0.0403  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,246 INFO:     46        MiBench_automotive-susan    0.9994    0.9956   +0.0039  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,246 INFO:     47           MiBench_consumer-jpeg    1.0003    0.8711   +0.1292  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,246 INFO:     48           MiBench_consumer-lame    0.9983    0.8994   +0.0989  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,246 INFO:     49        MiBench_consumer-typeset    1.0002    0.9916   +0.0086  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,246 INFO:     50        MiBench_network-dijkstra    1.0002    1.0008   -0.0006  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,246 INFO:     51        MiBench_network-patricia    0.9998    1.0000   -0.0002  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,246 INFO:     52           MiBench_office-ispell    1.0002    1.0109   -0.0106  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,246 INFO:     53     MiBench_office-stringsearch    0.9978    0.9548   +0.0430  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,247 INFO:     54       MiBench_security-blowfish    1.0004    0.9843   +0.0161  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,247 INFO:     55       MiBench_security-rijndael    0.9998    0.9380   +0.0618  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,247 INFO:     56            MiBench_security-sha    0.9988    0.7444   +0.2544  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,247 INFO:     57          MiBench_telecomm-CRC32    1.0000    0.9977   +0.0022  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,247 INFO:     58            MiBench_telecomm-FFT    1.0001    0.9916   +0.0085  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,247 INFO:     59          MiBench_telecomm-adpcm    1.0005    1.0049   -0.0043  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,247 INFO:     60            MiBench_telecomm-gsm    0.9979    0.8678   +0.1301  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,247 INFO:     61                   NPB-serial_is    0.9993    1.0000   -0.0007  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,247 INFO:     62                        Olden_bh    0.9972    1.2188   -0.2216  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,247 INFO:     63                    Olden_bisort    1.0005    0.9889   +0.0116  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,247 INFO:     64                      Olden_em3d    0.9997    1.0000   -0.0003  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,247 INFO:     65                    Olden_health    0.9997    0.9617   +0.0379  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,247 INFO:     66                       Olden_mst    1.0000    1.0141   -0.0141  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,248 INFO:     67                 Olden_perimeter    1.0001    0.9414   +0.0586  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,248 INFO:     68                     Olden_power    0.9961    0.7500   +0.2461  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,248 INFO:     69                   Olden_treeadd    1.0002    0.9951   +0.0051  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,248 INFO:     70                       Olden_tsp    0.9984    0.9540   +0.0444  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,248 INFO:     71                   Olden_voronoi    1.0002    0.9879   +0.0123  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,248 INFO:     72                 Prolangs-C++_NP    1.0002    0.9989   +0.0012  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,248 INFO:     73             Prolangs-C++_deriv1    1.0003    0.9959   +0.0044  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,249 INFO:     74             Prolangs-C++_deriv2    1.0003    1.0132   -0.0129  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,249 INFO:     75             Prolangs-C++_employ    1.0001    1.0014   -0.0012  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,249 INFO:     76                Prolangs-C++_fsm    1.0003    1.0151   -0.0148  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,249 INFO:     77             Prolangs-C++_garage    1.0003    0.9917   +0.0086  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,249 INFO:     78               Prolangs-C++_life    1.0001    0.9722   +0.0279  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,249 INFO:     79            Prolangs-C++_objects    1.0002    1.0019   -0.0017  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,250 INFO:     80              Prolangs-C++_ocean    1.0003    1.0016   -0.0013  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,250 INFO:     81             Prolangs-C++_office    1.0002    1.0128   -0.0125  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,250 INFO:     82             Prolangs-C++_primes    0.9990    0.4565   +0.5424  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,250 INFO:     83             Prolangs-C++_shapes    1.0002    1.0020   -0.0018  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,250 INFO:     84              Prolangs-C++_simul    0.9997    0.9059   +0.0938  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,250 INFO:     85              Prolangs-C++_trees    1.0000    1.0020   -0.0020  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,251 INFO:     86         Prolangs-C_TimberWolfMC    1.0004    0.9772   +0.0232  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,251 INFO:     87        Prolangs-C_archie-client    1.0002    1.0063   -0.0061  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,251 INFO:     88            Prolangs-C_assembler    1.0002    1.0135   -0.0133  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,251 INFO:     89                Prolangs-C_bison    1.0003    0.9944   +0.0059  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,251 INFO:     90                Prolangs-C_cdecl    1.0003    1.0213   -0.0210  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,252 INFO:     91             Prolangs-C_compiler    1.0003    1.0131   -0.0128  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,252 INFO:     92            Prolangs-C_fixoutput    1.0002    1.0067   -0.0065  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,252 INFO:     93             Prolangs-C_football    1.0003    1.0145   -0.0142  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,252 INFO:     94                Prolangs-C_gnugo    1.0006    0.9586   +0.0420  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,252 INFO:     95               Prolangs-C_loader    1.0004    1.0262   -0.0258  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,252 INFO:     96            Prolangs-C_simulator    1.0002    0.9952   +0.0050  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,253 INFO:     97                 Ptrdist_anagram    1.0000    0.9661   +0.0339  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,253 INFO:     98                      Ptrdist_bc    0.9996    1.0000   -0.0004  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,253 INFO:     99                      Ptrdist_ft    0.9946    0.7400   +0.2546  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,253 INFO:    100                      Ptrdist_ks    1.0002    0.9474   +0.0528  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,253 INFO:    101                   Ptrdist_yacr2    0.9999    0.8974   +0.1025  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,254 INFO:    102                Rodinia_backprop    0.9982    0.9857   +0.0125  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,254 INFO:    103                 Rodinia_hotspot    0.9989    0.5642   +0.4347  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,254 INFO:    104              Rodinia_pathfinder    0.9989    0.9121   +0.0868  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,254 INFO:    105                    Rodinia_srad    0.9993    0.5543   +0.4450  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,254 INFO:    106                      SciMark2-C    0.9985    1.0000   -0.0015  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,254 INFO:    107            TSVC_ControlFlow-dbl    0.9985    0.8571   +0.1414  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,255 INFO:    108            TSVC_ControlFlow-flt    0.9986    0.8125   +0.1861  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,255 INFO:    109           TSVC_ControlLoops-dbl    0.9966    0.7692   +0.2274  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,255 INFO:    110           TSVC_ControlLoops-flt    0.9986    0.5000   +0.4986  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,255 INFO:    111     TSVC_CrossingThresholds-dbl    0.9979    0.7333   +0.2645  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,255 INFO:    112     TSVC_CrossingThresholds-flt    0.9979    0.6818   +0.3160  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,256 INFO:    113          TSVC_Equivalencing-dbl    0.9960    0.6571   +0.3389  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,256 INFO:    114          TSVC_Equivalencing-flt    0.9961    0.2821   +0.7141  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,256 INFO:    115              TSVC_Expansion-dbl    0.9983    0.7500   +0.2483  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,256 INFO:    116              TSVC_Expansion-flt    0.9989    0.5556   +0.4434  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,256 INFO:    117         TSVC_GlobalDataFlow-dbl    0.9971    0.7222   +0.2749  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,256 INFO:    118         TSVC_GlobalDataFlow-flt    0.9971    0.4474   +0.5497  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,257 INFO:    119     TSVC_IndirectAddressing-dbl    0.9980    1.0000   -0.0020  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,257 INFO:    120     TSVC_IndirectAddressing-flt    0.9982    0.9286   +0.0696  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,257 INFO:    121      TSVC_InductionVariable-dbl    0.9975    0.8333   +0.1642  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,257 INFO:    122      TSVC_InductionVariable-flt    0.9973    0.7500   +0.2473  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,257 INFO:    123       TSVC_LinearDependence-dbl    0.9973    0.7647   +0.2326  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,257 INFO:    124       TSVC_LinearDependence-flt    0.9974    0.4815   +0.5159  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,258 INFO:    125          TSVC_LoopRerolling-dbl    0.9983    0.8182   +0.1801  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,258 INFO:    126          TSVC_LoopRerolling-flt    0.9968    0.8182   +0.1787  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,258 INFO:    127      TSVC_LoopRestructuring-dbl    0.9975    1.0000   -0.0025  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,258 INFO:    128      TSVC_LoopRestructuring-flt    0.9977    0.9091   +0.0887  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,258 INFO:    129          TSVC_NodeSplitting-dbl    0.9995    0.9231   +0.0764  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,259 INFO:    130          TSVC_NodeSplitting-flt    0.9994    0.8750   +0.1244  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,259 INFO:    131                TSVC_Packing-dbl    0.9972    0.8571   +0.1401  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,259 INFO:    132                TSVC_Packing-flt    0.9973    0.8667   +0.1306  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,259 INFO:    133            TSVC_Recurrences-dbl    0.9986    1.0000   -0.0014  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,259 INFO:    134            TSVC_Recurrences-flt    0.9986    1.0000   -0.0014  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,259 INFO:    135             TSVC_Reductions-dbl    0.9937    1.0000   -0.0063  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,260 INFO:    136             TSVC_Reductions-flt    0.9926    1.0000   -0.0074  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,260 INFO:    137              TSVC_Searching-dbl    0.9927    0.6667   +0.3261  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,260 INFO:    138              TSVC_Searching-flt    0.9929    0.3000   +0.6929  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,260 INFO:    139    TSVC_StatementReordering-dbl    0.9993    0.9231   +0.0762  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,260 INFO:    140    TSVC_StatementReordering-flt    0.9994    0.9412   +0.0582  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,260 INFO:    141              TSVC_Symbolics-dbl    0.9966    0.7368   +0.2598  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,260 INFO:    142              TSVC_Symbolics-flt    0.9975    0.3824   +0.6152  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,261 INFO:    143               Trimaran_enc-3des    0.9994    0.9583   +0.0410  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,261 INFO:    144                Trimaran_enc-md5    1.0000    1.0000   -0.0000  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,261 INFO:    145                Trimaran_enc-pc1    0.9952    0.5603   +0.4349  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,261 INFO:    146                Trimaran_enc-rc4    0.9985    0.8958   +0.1026  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,261 INFO:    147           Trimaran_netbench-crc    0.9983    1.0000   -0.0017  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,261 INFO:    148           Trimaran_netbench-url    0.9992    1.0000   -0.0008  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,261 INFO:    149                VersaBench_8b10b    0.9991    1.0000   -0.0009  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,262 INFO:    150           VersaBench_beamformer    0.9998    0.7705   +0.2293  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,262 INFO:    151                  VersaBench_bmm    1.0004    1.0000   +0.0004  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,262 INFO:    152                 VersaBench_dbms    1.0004    1.0000   +0.0004  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,262 INFO:    153               VersaBench_ecbdes    0.9999    1.0000   -0.0001  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,262 INFO:    154                    llubenchmark    1.0005    1.0000   +0.0005  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,262 INFO:    155                           mafft    1.0002    1.0000   +0.0002  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,262 INFO:    156      mediabench_adpcm_rawcaudio    1.0004    1.0015   -0.0011  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,263 INFO:    157      mediabench_adpcm_rawdaudio    1.0003    1.0154   -0.0151  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,263 INFO:    158      mediabench_g721_g721encode    1.0000    0.8981   +0.1019  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,263 INFO:    159            mediabench_gsm_toast    0.9990    0.8490   +0.1500  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,263 INFO:    160         mediabench_jpeg_jpeg-6a    1.0001    1.0070   -0.0069  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,263 INFO:    161       mediabench_mpeg2_mpeg2dec    0.9973    0.9766   +0.0206  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,263 INFO:    162                          nbench    0.9996    0.8710   +0.1287  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,264 INFO:    163                      tramp3d-v4    1.0004    0.5445   +0.4559  O1-g ≈ O3-g（差异在 ±5% 内）
+2026-03-31 14:22:07,264 INFO: 
+  ── 验证指标 ──
+2026-03-31 14:22:07,264 INFO:   MAE  = 0.1070
+2026-03-31 14:22:07,264 INFO:   MSE  = 0.0362
+2026-03-31 14:22:07,264 INFO:   RMSE = 0.1902
+2026-03-31 14:22:07,264 INFO:   方向准确率 = 112/163 (68.7%)
+2026-03-31 14:22:07,265 INFO:   预测 O1-g 更优: 64/163  (真实: 33/163)
+2026-03-31 14:22:07,265 INFO:   方向准确率（排除 ±5%）= 61/73 (83.6%)
+2026-03-31 14:22:07,356 INFO: 已应用 exp() 变换（log-target 模式）
+2026-03-31 14:22:07,356 INFO: ========================================================================
+2026-03-31 14:22:07,356 INFO: 版本对: O2-bolt_vs_O2-bolt-opt  (O2-bolt vs O2-bolt-opt)  共 165 个程序
+2026-03-31 14:22:07,356 INFO: 标签模式: fixed_time
+2026-03-31 14:22:07,356 INFO: 标签定义: Y = N_v1 / N_v2 (throughput ratio in a fixed window)
+2026-03-31 14:22:07,356 INFO: 判定方向: Y > 1 视为 O2-bolt 更快，Y < 1 视为 O2-bolt-opt 更快
+2026-03-31 14:22:07,356 INFO: ========================================================================
+2026-03-31 14:22:07,357 INFO:      #                              程序      预测 Ŷ      真实 Y        误差  判断
+2026-03-31 14:22:07,357 INFO:   ------------------------------------------------------------------------
+2026-03-31 14:22:07,357 INFO:      1                            7zip    1.0016    1.0000   +0.0016  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,357 INFO:      2             ASCI_Purple_SMG2000    1.0017    1.0000   +0.0017  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,357 INFO:      3               ASC_Sequoia_AMGmk    1.0002    1.0000   +0.0002  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,357 INFO:      4           ASC_Sequoia_CrystalMk    1.0009    1.0000   +0.0009  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,357 INFO:      5               ASC_Sequoia_IRSmk    1.0002    1.0000   +0.0002  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,357 INFO:      6                  BitBench_drop3    0.9995    1.0494   -0.0499  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,357 INFO:      7                 BitBench_five11    1.0000    0.9500   +0.0500  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,357 INFO:      8               BitBench_uudecode    1.0001    0.9986   +0.0015  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,358 INFO:      9               BitBench_uuencode    1.0004    0.9997   +0.0007  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,358 INFO:     10                          Bullet    1.0029    1.0000   +0.0029  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,358 INFO:     11         DOE-ProxyApps-C++_CLAMR    0.9951    1.0000   -0.0049  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,358 INFO:     12   DOE-ProxyApps-C++_HACCKernels    1.0003    1.0000   +0.0003  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,358 INFO:     13         DOE-ProxyApps-C++_HPCCG    0.9997    1.0000   -0.0003  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,358 INFO:     14       DOE-ProxyApps-C++_PENNANT    1.0001    1.0000   +0.0001  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,358 INFO:     15        DOE-ProxyApps-C++_miniFE    1.0011    1.0000   +0.0011  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,358 INFO:     16            DOE-ProxyApps-C_CoMD    1.0041    0.9600   +0.0441  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,358 INFO:     17      DOE-ProxyApps-C_Pathfinder    1.0064    1.0667   -0.0602  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,358 INFO:     18         DOE-ProxyApps-C_RSBench    1.0009    0.9852   +0.0157  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,359 INFO:     19       DOE-ProxyApps-C_SimpleMOC    1.0006    1.0000   +0.0006  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,359 INFO:     20         DOE-ProxyApps-C_XSBench    1.0022    0.9375   +0.0647  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,359 INFO:     21         DOE-ProxyApps-C_miniAMR    1.0032    1.0000   +0.0032  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,359 INFO:     22         DOE-ProxyApps-C_miniGMG    1.0067    0.9841   +0.0226  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,359 INFO:     23                     Fhourstones    1.0015    0.9811   +0.0203  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,359 INFO:     24                 Fhourstones-3.1    1.0003    1.0857   -0.0854  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,359 INFO:     25              FreeBench_analyzer    1.0008    1.0206   -0.0198  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,359 INFO:     26               FreeBench_distray    0.9997    0.9948   +0.0048  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,359 INFO:     27            FreeBench_fourinarow    1.0009    1.0000   +0.0009  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,360 INFO:     28                 FreeBench_mason    0.9998    0.9848   +0.0151  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,360 INFO:     29                FreeBench_neural    1.0014    1.0217   -0.0203  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,360 INFO:     30            FreeBench_pcompress2    1.0018    1.0335   -0.0318  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,360 INFO:     31                 FreeBench_pifft    1.0011    1.0018   -0.0007  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,360 INFO:     32               MallocBench_cfrac    1.0020    1.0000   +0.0020  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,360 INFO:     33            MallocBench_espresso    1.0021    1.0000   +0.0021  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,360 INFO:     34                  MallocBench_gs    1.0020    0.9546   +0.0474  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,360 INFO:     35                 McCat_01-qbsort    1.0002    0.9744   +0.0257  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,361 INFO:     36                 McCat_04-bisect    0.9995    1.0136   -0.0140  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,361 INFO:     37                   McCat_08-main    1.0017    1.0000   +0.0017  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,361 INFO:     38                    McCat_09-vor    1.0005    0.9947   +0.0057  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,361 INFO:     39                 McCat_12-IOtest    1.0004    0.9932   +0.0071  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,361 INFO:     40                   McCat_15-trie    1.0005    1.0101   -0.0096  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,361 INFO:     41                  McCat_17-bintr    0.9998    0.9494   +0.0504  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,361 INFO:     42                    McCat_18-imp    1.0001    1.1155   -0.1154  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,361 INFO:     43    MiBench_automotive-basicmath    1.0003    1.0000   +0.0003  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,362 INFO:     44     MiBench_automotive-bitcount    1.0010    0.8994   +0.1016  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,362 INFO:     45        MiBench_automotive-susan    1.0003    0.9883   +0.0120  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,362 INFO:     46           MiBench_consumer-jpeg    1.0005    0.9967   +0.0038  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,362 INFO:     47           MiBench_consumer-lame    1.0016    0.9877   +0.0139  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,362 INFO:     48        MiBench_consumer-typeset    1.0004    0.9945   +0.0059  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,362 INFO:     49        MiBench_network-dijkstra    1.0011    0.9192   +0.0819  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,362 INFO:     50        MiBench_network-patricia    0.9995    0.9936   +0.0060  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,362 INFO:     51           MiBench_office-ispell    1.0005    1.0015   -0.0009  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,363 INFO:     52     MiBench_office-stringsearch    1.0005    1.0090   -0.0085  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,363 INFO:     53       MiBench_security-blowfish    1.0005    1.0251   -0.0246  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,363 INFO:     54       MiBench_security-rijndael    0.9996    1.0469   -0.0473  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,363 INFO:     55            MiBench_security-sha    1.0004    1.0035   -0.0031  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,363 INFO:     56          MiBench_telecomm-CRC32    0.9995    1.0000   -0.0005  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,363 INFO:     57            MiBench_telecomm-FFT    1.0006    1.0031   -0.0025  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,364 INFO:     58          MiBench_telecomm-adpcm    1.0004    0.9976   +0.0028  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,364 INFO:     59            MiBench_telecomm-gsm    1.0021    1.0076   -0.0054  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,364 INFO:     60                   NPB-serial_is    1.0004    1.0000   +0.0004  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,364 INFO:     61                        Olden_bh    1.0018    1.0000   +0.0018  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,364 INFO:     62                    Olden_bisort    1.0004    0.9778   +0.0226  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,364 INFO:     63                      Olden_em3d    1.0041    1.6429   -0.6388  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,364 INFO:     64                    Olden_health    1.0005    0.9891   +0.0114  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,364 INFO:     65                       Olden_mst    1.0024    0.9920   +0.0103  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,365 INFO:     66                 Olden_perimeter    0.9999    0.9345   +0.0654  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,365 INFO:     67                     Olden_power    0.9988    1.0000   -0.0012  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,365 INFO:     68                   Olden_treeadd    1.0002    0.9854   +0.0147  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,365 INFO:     69                       Olden_tsp    1.0001    1.0000   +0.0001  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,365 INFO:     70                   Olden_voronoi    1.0011    1.0000   +0.0011  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,365 INFO:     71                           PAQ8p    1.0019    1.0000   +0.0019  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,365 INFO:     72                 Prolangs-C++_NP    1.0006    1.0088   -0.0083  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,365 INFO:     73               Prolangs-C++_city    1.0005    0.9759   +0.0246  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,366 INFO:     74             Prolangs-C++_deriv1    1.0005    1.0141   -0.0136  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,366 INFO:     75             Prolangs-C++_deriv2    1.0004    1.0115   -0.0110  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,366 INFO:     76             Prolangs-C++_employ    1.0002    0.9903   +0.0099  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,366 INFO:     77             Prolangs-C++_family    1.0004    1.0197   -0.0193  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,366 INFO:     78                Prolangs-C++_fsm    1.0004    1.0091   -0.0088  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,366 INFO:     79             Prolangs-C++_garage    1.0004    0.9981   +0.0022  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,366 INFO:     80               Prolangs-C++_life    1.0011    1.0000   +0.0011  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,367 INFO:     81            Prolangs-C++_objects    1.0003    1.0114   -0.0111  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,367 INFO:     82              Prolangs-C++_ocean    1.0003    1.0000   +0.0003  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,367 INFO:     83             Prolangs-C++_office    1.0004    1.0060   -0.0055  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,367 INFO:     84             Prolangs-C++_primes    1.0007    0.9580   +0.0426  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,367 INFO:     85             Prolangs-C++_shapes    1.0002    1.0252   -0.0249  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,367 INFO:     86              Prolangs-C++_simul    1.0003    1.0252   -0.0250  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,367 INFO:     87              Prolangs-C++_trees    1.0005    1.0176   -0.0172  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,368 INFO:     88              Prolangs-C++_vcirc    1.0006    1.0016   -0.0010  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,368 INFO:     89                Prolangs-C_agrep    0.9996    1.0382   -0.0386  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,368 INFO:     90             Prolangs-C_allroots    1.0006    1.0094   -0.0087  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,368 INFO:     91                Prolangs-C_bison    1.0000    0.9879   +0.0121  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,368 INFO:     92                Prolangs-C_cdecl    1.0002    1.0122   -0.0120  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,368 INFO:     93            Prolangs-C_fixoutput    1.0006    0.9965   +0.0041  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,369 INFO:     94             Prolangs-C_football    1.0006    0.9975   +0.0031  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,369 INFO:     95                Prolangs-C_gnugo    0.9998    1.0098   -0.0100  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,369 INFO:     96               Prolangs-C_loader    1.0010    1.0238   -0.0228  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,369 INFO:     97            Prolangs-C_simulator    1.0010    1.0159   -0.0149  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,369 INFO:     98           Prolangs-C_unix-smail    1.0005    0.9970   +0.0035  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,369 INFO:     99             Prolangs-C_unix-tbl    1.0007    1.0225   -0.0218  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,370 INFO:    100                 Ptrdist_anagram    1.0018    0.9833   +0.0185  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,370 INFO:    101                      Ptrdist_bc    1.0035    0.9045   +0.0990  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,370 INFO:    102                      Ptrdist_ft    1.0014    1.0000   +0.0014  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,370 INFO:    103                      Ptrdist_ks    0.9995    0.9831   +0.0164  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,370 INFO:    104                   Ptrdist_yacr2    1.0015    1.0938   -0.0922  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,370 INFO:    105                Rodinia_backprop    1.0019    1.0000   +0.0019  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,370 INFO:    106                 Rodinia_hotspot    1.0006    0.9923   +0.0083  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,370 INFO:    107              Rodinia_pathfinder    1.0046    1.0345   -0.0298  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,371 INFO:    108                    Rodinia_srad    1.0040    1.0000   +0.0040  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,371 INFO:    109                      SciMark2-C    1.0004    1.0000   +0.0004  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,371 INFO:    110            TSVC_ControlFlow-dbl    1.0003    1.0000   +0.0003  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,371 INFO:    111            TSVC_ControlFlow-flt    1.0000    1.0000   +0.0000  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,371 INFO:    112           TSVC_ControlLoops-dbl    1.0019    1.0000   +0.0019  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,371 INFO:    113           TSVC_ControlLoops-flt    0.9997    1.0000   -0.0003  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,372 INFO:    114     TSVC_CrossingThresholds-dbl    1.0008    1.0000   +0.0008  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,372 INFO:    115     TSVC_CrossingThresholds-flt    1.0005    0.9565   +0.0440  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,372 INFO:    116          TSVC_Equivalencing-dbl    1.0000    1.0000   -0.0000  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,372 INFO:    117          TSVC_Equivalencing-flt    0.9994    1.0000   -0.0006  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,372 INFO:    118              TSVC_Expansion-dbl    0.9999    1.0000   -0.0001  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,372 INFO:    119              TSVC_Expansion-flt    0.9998    0.9643   +0.0356  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,373 INFO:    120         TSVC_GlobalDataFlow-dbl    1.0012    1.0000   +0.0012  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,373 INFO:    121         TSVC_GlobalDataFlow-flt    0.9988    0.9744   +0.0244  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,373 INFO:    122     TSVC_IndirectAddressing-dbl    1.0010    1.0000   +0.0010  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,374 INFO:    123     TSVC_IndirectAddressing-flt    1.0004    1.0000   +0.0004  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,374 INFO:    124      TSVC_InductionVariable-dbl    1.0002    1.0000   +0.0002  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,374 INFO:    125      TSVC_InductionVariable-flt    1.0001    1.0000   +0.0001  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,375 INFO:    126       TSVC_LinearDependence-dbl    1.0004    1.0000   +0.0004  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,375 INFO:    127       TSVC_LinearDependence-flt    0.9998    0.9333   +0.0664  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,375 INFO:    128          TSVC_LoopRerolling-dbl    1.0006    1.0000   +0.0006  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,375 INFO:    129          TSVC_LoopRerolling-flt    1.0004    1.0000   +0.0004  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,376 INFO:    130      TSVC_LoopRestructuring-dbl    0.9999    1.0000   -0.0001  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,376 INFO:    131      TSVC_LoopRestructuring-flt    0.9997    1.0000   -0.0003  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,376 INFO:    132          TSVC_NodeSplitting-dbl    0.9999    1.0000   -0.0001  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,376 INFO:    133          TSVC_NodeSplitting-flt    0.9998    0.9412   +0.0587  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,376 INFO:    134                TSVC_Packing-dbl    0.9997    1.0000   -0.0003  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,377 INFO:    135                TSVC_Packing-flt    0.9998    1.3333   -0.3335  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,377 INFO:    136            TSVC_Recurrences-dbl    0.9991    1.0000   -0.0009  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,377 INFO:    137            TSVC_Recurrences-flt    0.9992    1.0000   -0.0008  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,377 INFO:    138             TSVC_Reductions-dbl    1.0008    1.0000   +0.0008  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,377 INFO:    139             TSVC_Reductions-flt    1.0002    1.0000   +0.0002  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,377 INFO:    140              TSVC_Searching-dbl    1.0006    1.0000   +0.0006  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,378 INFO:    141              TSVC_Searching-flt    1.0006    1.0000   +0.0006  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,378 INFO:    142    TSVC_StatementReordering-dbl    1.0001    1.0000   +0.0001  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,378 INFO:    143    TSVC_StatementReordering-flt    1.0000    1.0625   -0.0625  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,378 INFO:    144              TSVC_Symbolics-dbl    1.0007    1.0000   +0.0007  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,378 INFO:    145              TSVC_Symbolics-flt    1.0004    0.9444   +0.0560  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,379 INFO:    146               Trimaran_enc-3des    1.0011    1.0000   +0.0011  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,379 INFO:    147                Trimaran_enc-md5    1.0011    1.0000   +0.0011  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,379 INFO:    148                Trimaran_enc-pc1    1.0008    1.0000   +0.0008  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,379 INFO:    149                Trimaran_enc-rc4    1.0006    0.9796   +0.0210  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,379 INFO:    150           Trimaran_netbench-crc    1.0007    1.0000   +0.0007  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,380 INFO:    151           Trimaran_netbench-url    1.0008    1.0000   +0.0008  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,380 INFO:    152                VersaBench_8b10b    1.0021    1.0000   +0.0021  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,380 INFO:    153           VersaBench_beamformer    1.0005    1.1296   -0.1291  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,380 INFO:    154                  VersaBench_bmm    1.0005    1.0000   +0.0005  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,380 INFO:    155                 VersaBench_dbms    1.0010    1.0000   +0.0010  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,380 INFO:    156               VersaBench_ecbdes    1.0009    1.0000   +0.0009  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,381 INFO:    157                    llubenchmark    1.0004    1.0000   +0.0004  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,381 INFO:    158                           mafft    1.0005    1.0000   +0.0005  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,381 INFO:    159      mediabench_adpcm_rawcaudio    1.0003    0.9970   +0.0033  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,381 INFO:    160      mediabench_adpcm_rawdaudio    1.0004    0.9908   +0.0096  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,381 INFO:    161      mediabench_g721_g721encode    1.0007    0.9828   +0.0179  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,382 INFO:    162            mediabench_gsm_toast    1.0007    1.0302   -0.0296  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,382 INFO:    163       mediabench_mpeg2_mpeg2dec    1.0022    0.9592   +0.0431  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,382 INFO:    164                          nbench    1.0034    1.0312   -0.0279  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,382 INFO:    165                      tramp3d-v4    1.0006    0.9896   +0.0110  O2-bolt ≈ O2-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,382 INFO: 
+  ── 验证指标 ──
+2026-03-31 14:22:07,382 INFO:   MAE  = 0.0215
+2026-03-31 14:22:07,383 INFO:   MSE  = 0.0040
+2026-03-31 14:22:07,383 INFO:   RMSE = 0.0631
+2026-03-31 14:22:07,383 INFO:   方向准确率 = 103/165 (62.4%)
+2026-03-31 14:22:07,383 INFO:   预测 O2-bolt 更优: 135/165  (真实: 43/165)
+2026-03-31 14:22:07,383 INFO:   方向准确率（排除 ±5%）= 11/18 (61.1%)
+2026-03-31 14:22:07,462 INFO: 已应用 exp() 变换（log-target 模式）
+2026-03-31 14:22:07,462 INFO: ========================================================================
+2026-03-31 14:22:07,462 INFO: 版本对: O3-bolt_vs_O3-bolt-opt  (O3-bolt vs O3-bolt-opt)  共 161 个程序
+2026-03-31 14:22:07,462 INFO: 标签模式: fixed_time
+2026-03-31 14:22:07,462 INFO: 标签定义: Y = N_v1 / N_v2 (throughput ratio in a fixed window)
+2026-03-31 14:22:07,462 INFO: 判定方向: Y > 1 视为 O3-bolt 更快，Y < 1 视为 O3-bolt-opt 更快
+2026-03-31 14:22:07,462 INFO: ========================================================================
+2026-03-31 14:22:07,462 INFO:      #                              程序      预测 Ŷ      真实 Y        误差  判断
+2026-03-31 14:22:07,462 INFO:   ------------------------------------------------------------------------
+2026-03-31 14:22:07,463 INFO:      1                            7zip    1.0028    1.0000   +0.0028  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,463 INFO:      2             ASCI_Purple_SMG2000    1.0019    1.0000   +0.0019  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,463 INFO:      3               ASC_Sequoia_AMGmk    1.0002    1.0000   +0.0002  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,463 INFO:      4           ASC_Sequoia_CrystalMk    1.0010    1.0000   +0.0010  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,463 INFO:      5               ASC_Sequoia_IRSmk    1.0002    1.0000   +0.0002  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,463 INFO:      6                  BitBench_drop3    0.9994    0.9341   +0.0653  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,463 INFO:      7                 BitBench_five11    1.0001    0.9500   +0.0501  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,464 INFO:      8               BitBench_uudecode    1.0012    1.7186   -0.7173  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,464 INFO:      9               BitBench_uuencode    1.0000    1.0052   -0.0051  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,464 INFO:     10                          Bullet    1.0024    1.0000   +0.0024  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,464 INFO:     11         DOE-ProxyApps-C++_CLAMR    0.9953    1.0000   -0.0047  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,465 INFO:     12   DOE-ProxyApps-C++_HACCKernels    1.0005    1.0000   +0.0005  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,465 INFO:     13         DOE-ProxyApps-C++_HPCCG    0.9997    1.0000   -0.0003  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,465 INFO:     14       DOE-ProxyApps-C++_PENNANT    1.0001    1.0000   +0.0001  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,465 INFO:     15        DOE-ProxyApps-C++_miniFE    1.0018    1.0000   +0.0018  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,466 INFO:     16            DOE-ProxyApps-C_CoMD    1.0042    0.9200   +0.0842  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,466 INFO:     17      DOE-ProxyApps-C_Pathfinder    1.0066    1.0667   -0.0600  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,466 INFO:     18         DOE-ProxyApps-C_RSBench    1.0018    1.0000   +0.0018  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,466 INFO:     19       DOE-ProxyApps-C_SimpleMOC    1.0027    0.9697   +0.0330  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,466 INFO:     20         DOE-ProxyApps-C_XSBench    0.9994    0.9375   +0.0619  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,466 INFO:     21         DOE-ProxyApps-C_miniAMR    1.0025    1.0000   +0.0025  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,467 INFO:     22         DOE-ProxyApps-C_miniGMG    1.0068    1.0000   +0.0068  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,467 INFO:     23                     Fhourstones    1.0008    1.0370   -0.0362  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,467 INFO:     24                 Fhourstones-3.1    1.0005    1.0857   -0.0852  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,467 INFO:     25              FreeBench_analyzer    1.0013    0.9962   +0.0050  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,467 INFO:     26               FreeBench_distray    0.9995    1.0000   -0.0005  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,468 INFO:     27            FreeBench_fourinarow    1.0009    1.0000   +0.0009  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,468 INFO:     28                 FreeBench_mason    1.0000    0.9847   +0.0154  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,468 INFO:     29                FreeBench_neural    1.0005    1.0109   -0.0103  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,468 INFO:     30            FreeBench_pcompress2    1.0026    1.0060   -0.0035  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,468 INFO:     31                 FreeBench_pifft    1.0007    1.0127   -0.0120  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,468 INFO:     32               MallocBench_cfrac    1.0018    0.9811   +0.0207  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,469 INFO:     33            MallocBench_espresso    1.0020    1.0179   -0.0158  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,469 INFO:     34                  MallocBench_gs    1.0019    0.9430   +0.0590  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,469 INFO:     35                 McCat_01-qbsort    1.0003    0.9774   +0.0229  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,469 INFO:     36                 McCat_04-bisect    1.0000    1.1034   -0.1034  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,469 INFO:     37                   McCat_08-main    1.0023    1.0000   +0.0023  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,469 INFO:     38                    McCat_09-vor    1.0011    1.0160   -0.0149  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,470 INFO:     39                 McCat_12-IOtest    1.0005    0.9932   +0.0073  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,470 INFO:     40                   McCat_15-trie    1.0006    1.0226   -0.0220  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,470 INFO:     41                  McCat_17-bintr    1.0001    1.0000   +0.0001  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,470 INFO:     42                    McCat_18-imp    1.0005    1.0995   -0.0990  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,470 INFO:     43    MiBench_automotive-basicmath    0.9998    1.0000   -0.0002  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,470 INFO:     44     MiBench_automotive-bitcount    1.0002    0.9655   +0.0347  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,471 INFO:     45        MiBench_automotive-susan    1.0000    0.9868   +0.0131  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,471 INFO:     46           MiBench_consumer-jpeg    1.0004    0.9872   +0.0132  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,471 INFO:     47           MiBench_consumer-lame    1.0021    0.9880   +0.0142  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,471 INFO:     48        MiBench_consumer-typeset    1.0002    0.9886   +0.0116  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,471 INFO:     49        MiBench_network-dijkstra    1.0011    0.9219   +0.0792  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,471 INFO:     50        MiBench_network-patricia    1.0002    0.9957   +0.0045  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,472 INFO:     51           MiBench_office-ispell    1.0007    1.0066   -0.0059  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,472 INFO:     52     MiBench_office-stringsearch    1.0003    1.0157   -0.0154  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,472 INFO:     53       MiBench_security-rijndael    0.9997    1.0591   -0.0594  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,472 INFO:     54            MiBench_security-sha    1.0003    1.0075   -0.0072  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,472 INFO:     55          MiBench_telecomm-CRC32    0.9997    1.0069   -0.0072  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,473 INFO:     56            MiBench_telecomm-FFT    1.0005    0.9969   +0.0035  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,473 INFO:     57          MiBench_telecomm-adpcm    1.0006    0.9976   +0.0030  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,473 INFO:     58            MiBench_telecomm-gsm    1.0023    0.9928   +0.0094  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,473 INFO:     59                   NPB-serial_is    1.0005    1.0000   +0.0005  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,473 INFO:     60                        Olden_bh    1.0018    1.0000   +0.0018  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,473 INFO:     61                    Olden_bisort    1.0002    0.9891   +0.0111  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,474 INFO:     62                      Olden_em3d    1.0044    1.6429   -0.6385  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,474 INFO:     63                    Olden_health    1.0003    1.0000   +0.0003  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,474 INFO:     64                       Olden_mst    1.0032    1.0020   +0.0012  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,474 INFO:     65                 Olden_perimeter    1.0000    0.9912   +0.0089  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,474 INFO:     66                     Olden_power    0.9989    0.9870   +0.0119  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,474 INFO:     67                   Olden_treeadd    1.0002    1.0049   -0.0047  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,475 INFO:     68                       Olden_tsp    1.0003    1.0115   -0.0112  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,475 INFO:     69                   Olden_voronoi    1.0007    1.0061   -0.0054  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,475 INFO:     70                           PAQ8p    1.0021    1.0000   +0.0021  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,475 INFO:     71                 Prolangs-C++_NP    1.0005    1.0239   -0.0235  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,476 INFO:     72             Prolangs-C++_deriv1    1.0004    1.0014   -0.0010  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,476 INFO:     73             Prolangs-C++_deriv2    1.0004    1.0078   -0.0075  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,476 INFO:     74             Prolangs-C++_employ    1.0002    1.0104   -0.0102  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,476 INFO:     75                Prolangs-C++_fsm    1.0004    1.0083   -0.0079  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,476 INFO:     76             Prolangs-C++_garage    1.0004    1.0093   -0.0089  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,477 INFO:     77               Prolangs-C++_life    1.0011    1.0286   -0.0275  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,477 INFO:     78            Prolangs-C++_objects    1.0004    1.0146   -0.0141  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,477 INFO:     79              Prolangs-C++_ocean    1.0004    0.9920   +0.0083  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,477 INFO:     80             Prolangs-C++_office    1.0003    0.9976   +0.0027  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,477 INFO:     81             Prolangs-C++_primes    1.0010    0.9521   +0.0489  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,478 INFO:     82             Prolangs-C++_shapes    1.0004    1.0009   -0.0004  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,478 INFO:     83              Prolangs-C++_simul    1.0003    0.9927   +0.0076  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,478 INFO:     84              Prolangs-C++_trees    1.0004    1.0263   -0.0258  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,478 INFO:     85         Prolangs-C_TimberWolfMC    1.0012    1.0175   -0.0162  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,478 INFO:     86                Prolangs-C_agrep    1.0001    1.0310   -0.0309  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,478 INFO:     87             Prolangs-C_allroots    1.0011    1.0128   -0.0117  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,479 INFO:     88        Prolangs-C_archie-client    1.0005    1.0116   -0.0111  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,479 INFO:     89                Prolangs-C_bison    0.9999    0.9933   +0.0066  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,479 INFO:     90                Prolangs-C_cdecl    1.0000    1.0133   -0.0132  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,479 INFO:     91             Prolangs-C_football    1.0005    1.0212   -0.0207  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,479 INFO:     92                Prolangs-C_gnugo    0.9980    1.0174   -0.0193  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,479 INFO:     93           Prolangs-C_unix-smail    1.0005    1.0062   -0.0057  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,480 INFO:     94             Prolangs-C_unix-tbl    1.0006    1.0171   -0.0165  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,480 INFO:     95                 Ptrdist_anagram    1.0028    0.9833   +0.0195  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,480 INFO:     96                      Ptrdist_bc    1.0040    0.9161   +0.0878  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,480 INFO:     97                      Ptrdist_ft    1.0013    1.0200   -0.0187  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,480 INFO:     98                      Ptrdist_ks    0.9994    0.8507   +0.1487  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,481 INFO:     99                   Ptrdist_yacr2    1.0018    1.0833   -0.0816  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,481 INFO:    100                Rodinia_backprop    1.0035    1.0000   +0.0035  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,481 INFO:    101                 Rodinia_hotspot    0.9994    1.0039   -0.0045  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,481 INFO:    102              Rodinia_pathfinder    1.0038    1.0000   +0.0038  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,481 INFO:    103                    Rodinia_srad    1.0030    1.0110   -0.0080  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,481 INFO:    104                      SciMark2-C    1.0006    1.0000   +0.0006  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,482 INFO:    105            TSVC_ControlFlow-dbl    1.0002    1.0000   +0.0002  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,482 INFO:    106            TSVC_ControlFlow-flt    1.0001    1.0667   -0.0666  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,482 INFO:    107           TSVC_ControlLoops-dbl    0.9991    1.0000   -0.0009  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,482 INFO:    108           TSVC_ControlLoops-flt    0.9993    1.0000   -0.0007  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,482 INFO:    109     TSVC_CrossingThresholds-dbl    1.0004    1.0000   +0.0004  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,483 INFO:    110     TSVC_CrossingThresholds-flt    1.0005    1.0000   +0.0005  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,483 INFO:    111          TSVC_Equivalencing-dbl    0.9996    1.0000   -0.0004  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,483 INFO:    112          TSVC_Equivalencing-flt    0.9996    1.0128   -0.0132  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,483 INFO:    113              TSVC_Expansion-dbl    0.9999    1.0000   -0.0001  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,483 INFO:    114              TSVC_Expansion-flt    0.9998    1.0385   -0.0386  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,483 INFO:    115         TSVC_GlobalDataFlow-dbl    0.9997    1.0000   -0.0003  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,484 INFO:    116         TSVC_GlobalDataFlow-flt    0.9991    1.0000   -0.0009  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,484 INFO:    117     TSVC_IndirectAddressing-dbl    1.0003    0.9231   +0.0773  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,484 INFO:    118     TSVC_IndirectAddressing-flt    1.0004    0.9231   +0.0773  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,484 INFO:    119      TSVC_InductionVariable-dbl    1.0002    1.0909   -0.0907  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,484 INFO:    120      TSVC_InductionVariable-flt    1.0000    1.0000   +0.0000  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,485 INFO:    121       TSVC_LinearDependence-dbl    1.0002    1.0000   +0.0002  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,485 INFO:    122       TSVC_LinearDependence-flt    0.9997    0.9310   +0.0687  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,485 INFO:    123          TSVC_LoopRerolling-dbl    1.0003    1.0000   +0.0003  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,485 INFO:    124          TSVC_LoopRerolling-flt    1.0004    1.0000   +0.0004  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,485 INFO:    125      TSVC_LoopRestructuring-dbl    0.9999    1.0000   -0.0001  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,485 INFO:    126      TSVC_LoopRestructuring-flt    0.9996    1.0000   -0.0004  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,486 INFO:    127          TSVC_NodeSplitting-dbl    1.0000    0.9231   +0.0769  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,486 INFO:    128          TSVC_NodeSplitting-flt    1.0000    1.0667   -0.0667  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,486 INFO:    129                TSVC_Packing-dbl    1.0001    1.2727   -0.2727  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,486 INFO:    130                TSVC_Packing-flt    1.0002    1.2500   -0.2498  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,486 INFO:    131            TSVC_Recurrences-dbl    0.9992    1.0000   -0.0008  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,487 INFO:    132            TSVC_Recurrences-flt    0.9989    1.0000   -0.0011  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,487 INFO:    133             TSVC_Reductions-dbl    1.0002    1.0000   +0.0002  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,487 INFO:    134             TSVC_Reductions-flt    1.0003    1.0000   +0.0003  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,487 INFO:    135              TSVC_Searching-dbl    1.0005    1.0000   +0.0005  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,487 INFO:    136              TSVC_Searching-flt    1.0003    1.0000   +0.0003  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,487 INFO:    137    TSVC_StatementReordering-dbl    1.0000    1.0000   -0.0000  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,488 INFO:    138    TSVC_StatementReordering-flt    1.0000    1.0000   +0.0000  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,488 INFO:    139              TSVC_Symbolics-dbl    1.0004    0.9474   +0.0530  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,488 INFO:    140              TSVC_Symbolics-flt    1.0002    0.9189   +0.0813  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,488 INFO:    141               Trimaran_enc-3des    1.0011    1.0435   -0.0424  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,488 INFO:    142                Trimaran_enc-md5    1.0007    1.0000   +0.0007  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,489 INFO:    143                Trimaran_enc-pc1    1.0010    1.0000   +0.0010  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,489 INFO:    144                Trimaran_enc-rc4    1.0007    1.0000   +0.0007  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,489 INFO:    145           Trimaran_netbench-crc    1.0006    1.0000   +0.0006  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,489 INFO:    146           Trimaran_netbench-url    1.0007    1.0000   +0.0007  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,489 INFO:    147                VersaBench_8b10b    1.0030    0.8889   +0.1141  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,490 INFO:    148           VersaBench_beamformer    1.0001    1.0000   +0.0001  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,490 INFO:    149                  VersaBench_bmm    1.0005    1.0000   +0.0005  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,490 INFO:    150                 VersaBench_dbms    1.0011    1.0000   +0.0011  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,491 INFO:    151               VersaBench_ecbdes    1.0014    1.0000   +0.0014  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,491 INFO:    152                    llubenchmark    1.0004    1.0000   +0.0004  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,491 INFO:    153                           mafft    1.0002    1.0000   +0.0002  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,491 INFO:    154      mediabench_adpcm_rawcaudio    1.0004    1.0070   -0.0066  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,491 INFO:    155      mediabench_adpcm_rawdaudio    1.0005    1.0166   -0.0161  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,492 INFO:    156      mediabench_g721_g721encode    1.0000    0.9961   +0.0039  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,492 INFO:    157            mediabench_gsm_toast    1.0008    0.9990   +0.0018  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,492 INFO:    158         mediabench_jpeg_jpeg-6a    1.0002    1.0196   -0.0194  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,492 INFO:    159       mediabench_mpeg2_mpeg2dec    1.0027    0.9586   +0.0441  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,492 INFO:    160                          nbench    1.0031    0.9394   +0.0637  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,492 INFO:    161                      tramp3d-v4    0.9996    0.9932   +0.0065  O3-bolt ≈ O3-bolt-opt（差异在 ±5% 内）
+2026-03-31 14:22:07,493 INFO: 
+  ── 验证指标 ──
+2026-03-31 14:22:07,493 INFO:   MAE  = 0.0305
+2026-03-31 14:22:07,493 INFO:   MSE  = 0.0077
+2026-03-31 14:22:07,493 INFO:   RMSE = 0.0880
+2026-03-31 14:22:07,493 INFO:   方向准确率 = 104/161 (64.6%)
+2026-03-31 14:22:07,493 INFO:   预测 O3-bolt 更优: 130/161  (真实: 57/161)
+2026-03-31 14:22:07,493 INFO:   方向准确率（排除 ±5%）= 16/29 (55.2%)
+2026-03-31 14:22:07,494 INFO: 
