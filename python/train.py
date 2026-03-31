@@ -53,7 +53,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from device_utils import resolve_device
 from model_factory import MODEL_CHOICES, build_model, get_model_kwargs
 from config_utils import (
-    DEFAULT_PAIRS, TUNED_CONFIGS, LABEL_MECHANISMS,
+    DEFAULT_PAIRS, TUNED_CONFIGS, LABEL_MECHANISMS, BOLT_OPT_VARIANTS,
     derive_config_path, save_model_config, collect_training_config,
     load_model_config, detect_label_mechanism, apply_tuned_config,
     resolve_checkpoint_file,
@@ -79,6 +79,9 @@ def main():
     parser.add_argument(
         "--pairs", nargs="*", default=None,
         help="版本对目录名（默认全部三组）")
+    parser.add_argument(
+        "--bolt-opt", action="store_true", default=False,
+        help="仅使用 BOLT 优化对比数据集（等价于 --pairs %s）" % " ".join(BOLT_OPT_VARIANTS))
     parser.add_argument(
         "--epochs", type=int, default=150,
         help="训练轮数")
@@ -255,7 +258,10 @@ def main():
                 ", ".join(f"{k}={getattr(args, k)}" for k in sorted(tuned_keys)))
 
     # ── 数据加载 ──
-    pair_names = args.pairs or DEFAULT_PAIRS
+    if args.bolt_opt:
+        pair_names = list(BOLT_OPT_VARIANTS)
+    else:
+        pair_names = args.pairs or DEFAULT_PAIRS
 
     logging.getLogger(__name__).info("加载数据...")
     X_v1, X_v2, Y, len_v1, len_v2 = merge_pairs(tensor_base, pair_names)

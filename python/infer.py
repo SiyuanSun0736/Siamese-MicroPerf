@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-# 注意：本模块已支持基于 `--model` 与 `--pairs` 的自动微调（auto-tune）回退配置。
-# 当启用 `--auto-tune`（默认开启）且 configs/ 和 checkpoint 中均未找到模型参数时，
-# 会使用 `train.py` 中的 `TUNED_CONFIGS` 为推理构建合适的模型架构参数。
-# 优先级：configs/ JSON > checkpoint 元数据 > `--auto-tune` 预设 > 命令行显式参数。
+# 推理模块已与训练完全解耦——所有模型架构参数与训练配置均从 configs/ JSON 自动解析，
+# 不再依赖 train.py 的 TUNED_CONFIGS 或 apply_tuned_config。
+# 优先级：configs/ JSON > checkpoint 元数据 > 报错退出。
 #
 # log_target 适配
 # ---------------
@@ -15,32 +14,35 @@
 # --------------
 # pair_swap 是纯训练时数据增强（将 (v2, v1, 1/Y) 追加至训练集，令模型学到反对称性），
 # 推理始终以 (v1, v2) 自然顺序输入，无需任何额外处理。
-# 推理端会从 checkpoint 读取该标志并在日志中展示，不影响推理逻辑。
+# 推理端会从 JSON 配置读取该标志并在日志中展示，不影响推理逻辑。
 """
 infer.py — 推理与验证阶段 (Inference / Validation)
 ===================================================
 
 加载训练好的 Siamese 系列模型（CNN / LSTM / Transformer），对配对版本进行推理，输出预测加速比 Ŷ 及判断结论。
 
+**与 train.py 完全解耦**——所有模型架构参数、训练配置均从 configs/ JSON 自动解析，
+无需手动指定模型超参，无需依赖训练端的 TUNED_CONFIGS 预设。
+
+配置解析优先级
+--------------
+    1. configs/ JSON 配置文件（训练时自动生成，推荐方式）
+    2. checkpoint 内嵌元数据（model_name, model_kwargs）
+    3. 报错退出（提示用户提供 --config 或完整 checkpoint）
+
 支持两种输入模式
 ----------------
     1. 张量模式（默认）：直接读取 build_dataset_*.py 生成的 .pt 张量
     2. CSV 模式：读取原始 PMU CSV，实时执行特征工程后推理
 
-输出
-----
-    对每个程序输出：
-    - 预测加速比 Ŷ（标量）
-    - 判断结论：Ŷ > 1.0 → v1 优于 v2；Ŷ < 1.0 → v2 优于 v1
-    - 若有真实标签 Y，同时输出误差与验证指标
-
 用法
 ----
-    # 对已有张量做推理（默认 fixed_time）
-    python3 python/infer.py --checkpoint checkpoints/best_model.pt
+    # 自动从 configs/ JSON 解析模型参数（推荐）
+    python3 python/infer.py --checkpoint checkpoints/trans_best_time.pt
 
-    # 指定模型（auto/cnn/lstm/transformer），默认为 auto（优先使用 checkpoint 中的记录）
-    python3 python/infer.py --checkpoint checkpoints/best_model.pt --model lstm
+    # 显式指定 JSON 配置文件
+    python3 python/infer.py --checkpoint checkpoints/best_model.pt \
+        --config configs/trans_best_time.json
 
     # 使用固定工作量张量
     python3 python/infer.py --checkpoint checkpoints/best_model.pt \
@@ -55,7 +57,7 @@ infer.py — 推理与验证阶段 (Inference / Validation)
         --csv-v1 path/to/v1.csv --csv-v2 path/to/v2.csv \
         --stats train_set/tensors/fixed_time/O2-bolt_vs_O2-bolt-opt/stats.json
 
-    # 强制覆盖 log-target 设置（通常由 checkpoint 自动决定，无需手动指定）
+    # 强制覆盖 log-target 设置（通常由 JSON 配置自动决定，无需手动指定）
     python3 python/infer.py --checkpoint checkpoints/best_model.pt --log-target
     python3 python/infer.py --checkpoint checkpoints/best_model.pt --no-log-target
 """
@@ -71,9 +73,8 @@ import numpy as np
 import torch
 
 from device_utils import resolve_device
-from model_factory import INFER_MODEL_CHOICES, build_model, get_model_kwargs
-from config_utils import (TUNED_CONFIGS, apply_tuned_config, DEFAULT_PAIRS,
-                          derive_config_path, load_model_config, detect_label_mechanism)
+from model_factory import INFER_MODEL_CHOICES, build_model
+from config_utils import derive_config_path, load_model_config
 
 # 复用 build_dataset 的特征提取逻辑
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -348,35 +349,12 @@ def main():
         "--stats", type=Path, default=None,
         help="归一化统计量 stats.json 路径（CSV 模式必需）")
 
-    # 模型超参（需与训练时一致；若 checkpoint 中有记录则 infer --model auto 会优先复用）
+    # 模型类型（默认 auto：从 JSON 配置或 checkpoint 自动推断）
     parser.add_argument(
         "--model", "--arch", dest="model",
-        choices=INFER_MODEL_CHOICES, default="auto")
-    parser.add_argument("--in-features", type=int, default=6)
-    parser.add_argument("--cnn-hidden", type=int, default=64)
-    parser.add_argument("--cnn-out", type=int, default=128)
-    parser.add_argument("--lstm-hidden", type=int, default=64)
-    parser.add_argument("--lstm-out", type=int, default=128)
-    parser.add_argument("--bidirectional", action="store_true", default=True)
-    parser.add_argument("--no-bidirectional", dest="bidirectional",
-                        action="store_false")
-    parser.add_argument("--d-model", type=int, default=128)
-    parser.add_argument("--nhead", type=int, default=4)
-    parser.add_argument("--num-layers", type=int, default=3)
-    parser.add_argument("--dim-feedforward", type=int, default=256)
-    parser.add_argument("--max-len", type=int, default=512)
-    parser.add_argument("--pos-encoding", choices=["learnable", "sinusoidal"],
-                        default="learnable")
-    parser.add_argument("--mlp-hidden", type=int, default=64)
-    parser.add_argument("--dropout", type=float, default=0.1)
-    # 自动微调预设（仅应用模型架构参数）
-    parser.add_argument(
-        "--auto-tune", action="store_true", default=True,
-        help="根据 --model 和 --pairs 自动补全模型架构超参（默认开启；配置文件/checkpoint 优先）")
-    parser.add_argument(
-        "--no-auto-tune", dest="auto_tune", action="store_false",
-        help="禁用自动微调，使用命令行原始默认值")
-    # 配置目录（auto 信息与 checkpoint 分离）
+        choices=INFER_MODEL_CHOICES, default="auto",
+        help="模型类型（默认 auto，从 JSON 配置文件自动解析）")
+    # 配置目录（JSON 配置与 checkpoint 分离）
     parser.add_argument(
         "--config-dir", type=Path, default=None,
         help="模型配置 JSON 目录（默认 project_root/configs）")
@@ -394,19 +372,7 @@ def main():
         action="store_false",
         help="强制禁用 log-target 模式")
 
-    # 1) 获取 argparse 原始默认值
-    arg_defaults = vars(parser.parse_args(["--checkpoint", "dummy.pt"]))
-    # 2) 正式解析
     args = parser.parse_args()
-    # 3) 识别用户显式指定的参数
-    args._explicitly_set = {
-        k for k, v in vars(args).items()
-        if k in arg_defaults and v != arg_defaults[k]
-    }
-    # 4) 非 auto 模式：直接应用 auto-tune
-    if args.auto_tune and args.model != "auto":
-        _tb = args.tensor_base or (args.project_root / "train_set" / "tensors" / "fixed_time")
-        apply_tuned_config(args, label_mechanism=detect_label_mechanism(_tb))
 
     try:
         device, resolved_device_name, device_message = resolve_device(args.device)
@@ -440,95 +406,68 @@ def main():
 
     logger = logging.getLogger(__name__)
 
-    # 解析模型配置 ──
-    # 优先级：config JSON > checkpoint 元数据 > auto-tune 预设 > argparse 默认値
+    # ── 解析模型配置（纯 JSON 驱动，与 train.py 完全解耦）──
+    # 优先级：configs/ JSON > checkpoint 元数据 > 报错退出
+    config_dir = args.config_dir or (args.project_root / "configs")
+    config = None
     resolved_model_name = None
     resolved_model_kwargs = None
     resolved_log_target = None
     ckpt_pair_swap: bool | None = None  # 仅用于日志透明度
 
-    if args.model == "auto":
-        # 1) 尝试从 configs/ 目录读取配置 JSON
-        config_dir = args.config_dir or (args.project_root / "configs")
-        config = None
-        if args.config:
-            config = load_model_config(args.config)
-            if config:
-                logger.info("从指定配置文件加载: %s", args.config)
-        else:
-            auto_config_path = derive_config_path(
-                args.checkpoint, args.project_root, config_dir)
-            config = load_model_config(auto_config_path)
-            if config:
-                logger.info("从配置文件自动加载: %s", auto_config_path)
-
+    # 1) 尝试从 JSON 配置文件加载
+    if args.config:
+        config = load_model_config(args.config)
         if config:
-            resolved_model_name = config["model_name"]
-            resolved_model_kwargs = config["model_kwargs"]
-            resolved_log_target = config.get("log_target", False)
-            ckpt_pair_swap = config.get("training_config", {}).get("pair_swap", None)
-        else:
-            # 2) 回退：从 checkpoint 文件读取元数据
-            ckpt_meta = torch.load(
-                args.checkpoint, map_location="cpu", weights_only=False)
-            ckpt_model_name = ckpt_meta.get("model_name")
-            ckpt_model_kwargs = ckpt_meta.get("model_kwargs")
-            resolved_log_target = ckpt_meta.get("log_target", False)
-
-            if ckpt_model_name and ckpt_model_kwargs:
-                resolved_model_name = ckpt_model_name
-                resolved_model_kwargs = ckpt_model_kwargs
-                logger.info("从 checkpoint 元数据获取模型信息: %s", ckpt_model_name)
-            else:
-                # 3) 最终回退：确定模型名后应用 auto-tune
-                resolved_model_name = ckpt_model_name or "cnn"
-                logger.info(
-                    "配置文件和 checkpoint 均无完整模型参数，"
-                    "使用 auto-tune 回退 (%s)", resolved_model_name)
-                # 临时设置 args.model 以便 apply_tuned_config 工作
-                args.model = resolved_model_name
-                if args.auto_tune:
-                    _tb = args.tensor_base or (
-                        args.project_root / "train_set" / "tensors" / "fixed_time")
-                    apply_tuned_config(
-                        args,
-                        label_mechanism=detect_label_mechanism(_tb))
-                resolved_model_kwargs = get_model_kwargs(
-                    resolved_model_name,
-                    in_features=args.in_features, args=args)
-                args.model = "auto"  # 恢复
-
-            # 从 checkpoint 训练配置中读取 pair_swap（仅用于日志透明度）
-            ckpt_pair_swap = ckpt_meta.get("training_config", {}).get("pair_swap", None)
-            if ckpt_pair_swap is None:
-                ckpt_pair_swap = ckpt_meta.get("pair_swap", None)
-
+            logger.info("从指定配置文件加载: %s", args.config)
     else:
-        # 显式指定模型类型，但仍优先检查 configs/ JSON 以获取架构超参
-        config_dir = args.config_dir or (args.project_root / "configs")
-        config = None
-        if args.config:
-            config = load_model_config(args.config)
-            if config:
-                logger.info("从指定配置文件加载: %s", args.config)
-        else:
-            auto_config_path = derive_config_path(
-                args.checkpoint, args.project_root, config_dir)
-            config = load_model_config(auto_config_path)
-            if config and config.get("model_name") == args.model:
-                logger.info("从配置文件获取模型架构超参: %s", auto_config_path)
-            else:
-                config = None  # 不存在或模型类型不匹配，忽略
-
+        auto_config_path = derive_config_path(
+            args.checkpoint, args.project_root, config_dir)
+        config = load_model_config(auto_config_path)
         if config:
-            resolved_model_name = args.model
-            resolved_model_kwargs = config["model_kwargs"]
-            resolved_log_target = config.get("log_target", False)
-            ckpt_pair_swap = config.get("training_config", {}).get("pair_swap", None)
+            logger.info("从配置文件自动加载: %s", auto_config_path)
+
+    if config:
+        cfg_model_name = config["model_name"]
+        # 若用户显式指定 --model 且不是 auto，校验与 JSON 一致
+        if args.model != "auto" and args.model != cfg_model_name:
+            logger.error(
+                "命令行指定模型 %s 与配置文件中的 %s 不一致",
+                args.model, cfg_model_name)
+            sys.exit(1)
+        resolved_model_name = cfg_model_name
+        resolved_model_kwargs = config["model_kwargs"]
+        resolved_log_target = config.get("log_target", False)
+        ckpt_pair_swap = config.get("training_config", {}).get("pair_swap", None)
+    else:
+        # 2) 回退：从 checkpoint 文件读取元数据
+        logger.info("未找到 JSON 配置文件，尝试从 checkpoint 元数据恢复...")
+        ckpt_meta = torch.load(
+            args.checkpoint, map_location="cpu", weights_only=False)
+        ckpt_model_name = ckpt_meta.get("model_name")
+        ckpt_model_kwargs = ckpt_meta.get("model_kwargs")
+        resolved_log_target = ckpt_meta.get("log_target", False)
+
+        if ckpt_model_name and ckpt_model_kwargs:
+            if args.model != "auto" and args.model != ckpt_model_name:
+                logger.error(
+                    "命令行指定模型 %s 与 checkpoint 中的 %s 不一致",
+                    args.model, ckpt_model_name)
+                sys.exit(1)
+            resolved_model_name = ckpt_model_name
+            resolved_model_kwargs = ckpt_model_kwargs
+            logger.info("从 checkpoint 元数据获取模型信息: %s", ckpt_model_name)
         else:
-            resolved_model_name = args.model
-            resolved_model_kwargs = get_model_kwargs(
-                args.model, in_features=args.in_features, args=args)
+            logger.error(
+                "无法确定模型架构：configs/ 目录下无对应 JSON 配置，"
+                "checkpoint 中也无 model_name/model_kwargs 元数据。\n"
+                "请使用 --config 指定配置文件，或使用包含完整元数据的 checkpoint。")
+            sys.exit(1)
+
+        # 从 checkpoint 训练配置中读取 pair_swap（仅用于日志透明度）
+        ckpt_pair_swap = ckpt_meta.get("training_config", {}).get("pair_swap", None)
+        if ckpt_pair_swap is None:
+            ckpt_pair_swap = ckpt_meta.get("pair_swap", None)
 
     # 命令行显式 --log-target / --no-log-target 优先级最高（仅在非 None 时覆盖）
     if args.log_target_override is not None:

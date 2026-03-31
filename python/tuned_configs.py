@@ -221,8 +221,8 @@ TUNED_CONFIGS: dict[str, dict[str, dict]] = {
                     "grad_clip": 1.0,
                     "noise_std": 0.05,
                     "direction_lambda": 0.0,
-                    "pair_swap": False,
-                    "log_target": False,
+                    "pair_swap": True,
+                    "log_target": True,
                 },
                 "O1-g_vs_O3-g": {
                     "huber_delta": 1.0,
