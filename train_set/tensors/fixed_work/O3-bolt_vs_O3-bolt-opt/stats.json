@@ -1,0 +1,34 @@
+{
+  "mechanism": "fixed_workload",
+  "label_semantics": "Y = T_v2 / T_v1 (time ratio)",
+  "feature_names": [
+    "icache_miss_mpki",
+    "itlb_load_mpki",
+    "itlb_miss_mpki",
+    "branch_inst_mpki",
+    "branch_miss_mpki",
+    "lbr_log1p_span"
+  ],
+  "mu": [
+    6.8642354011535645,
+    0.1202068105340004,
+    0.07818441838026047,
+    142.23451232910156,
+    2.632493019104004,
+    6.264826774597168
+  ],
+  "sigma": [
+    15.468879699707031,
+    0.25152525305747986,
+    0.1620153933763504,
+    82.1875991821289,
+    4.020407199859619,
+    1.4757524728775024
+  ],
+  "max_seq_len": 60,
+  "v1": "O3-bolt",
+  "v2": "O3-bolt-opt",
+  "n_samples": 161,
+  "len_v1_mean": 59.07453416149068,
+  "len_v2_mean": 59.40372670807454
+}

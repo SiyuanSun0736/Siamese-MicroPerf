@@ -6,10 +6,8 @@
 /train_set/data
 /train_set/data_bolt
 /train_set/test
-/train_set/manifest*
 /train_set/bolt_profiles
 pmu_monitor
 /python/plots
-/train_set/tensors
 /.env
 /configs

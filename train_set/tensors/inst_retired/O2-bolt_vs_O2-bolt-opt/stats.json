@@ -1,0 +1,35 @@
+{
+  "mechanism": "inst_retired_ratio",
+  "label_semantics": "Y = \u03a3inst_v1 / \u03a3inst_v2 (retired instruction ratio)",
+  "label_source_col": "inst_retired.any",
+  "feature_names": [
+    "icache_miss_mpki",
+    "itlb_load_mpki",
+    "itlb_miss_mpki",
+    "branch_inst_mpki",
+    "branch_miss_mpki",
+    "lbr_log1p_span"
+  ],
+  "mu": [
+    9.631467819213867,
+    0.16435500979423523,
+    0.0996277704834938,
+    149.06768798828125,
+    2.9457478523254395,
+    6.323949337005615
+  ],
+  "sigma": [
+    18.976205825805664,
+    0.3051975667476654,
+    0.1832825094461441,
+    81.60784912109375,
+    4.0982985496521,
+    1.4652791023254395
+  ],
+  "seq_len": 60,
+  "v1": "O2-bolt",
+  "v2": "O2-bolt-opt",
+  "n_samples": 174,
+  "instsum_v1_mean": 176432804489.28162,
+  "instsum_v2_mean": 174605592227.41953
+}
