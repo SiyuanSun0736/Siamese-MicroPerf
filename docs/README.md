@@ -1,40 +1,60 @@
-### 1. 物理采集与标签生成 (Data Collection & Labeling)
-* **前提条件**：固定 eBPF/perf 的时间窗口（例如 $T=10$ 秒），采集过程需尽可能隔离系统后台高负载噪声。
-* **输入变量**：同一种算法的两个编译/重排版本 $v1$ 和 $v2$（例如 O2-bolt 与 O2-bolt-opt）。
-* **操作机制**：
-  * 在固定窗口内循环执行 $v1$ 和 $v2$，记录实际执行次数 $N_{v1}$ 和 $N_{v2}$。
-  * **连续目标生成**：计算实际性能加速比作为回归标签 $Y = N_{v1} / N_{v2}$。
-  * 并发采集前端硬件事件（`L1-icache-load-misses`, `iTLB-load-misses`, `branch-misses` 等瞬时值）与 LBR 物理跳转轨迹。
+# 文档导航
 
-### 2. 异构特征对齐与张量构造 (Feature Engineering)
-* **前提条件**：隔离宏观执行时间的影响，使特征矩阵仅反映微观架构阻力，并消除多维度特征的绝对值域差异。
-* **变量映射**：
-  * **PMU 标度统一**：计算各事件的区间 MPKI（$C_t / I_t \times 1000$），基于独立区间瞬时指令数 $I_t$ 消除漂移风险。
-  * **LBR 极值压缩**：提取 LBR 栈的统计标量（如平均跳转跨度 $X_{lbr\_span}$），执行非线性压缩 $X'_{lbr} = \log(1 + X_{lbr\_span})$。
-  * **跨维度归一化 (Z-score Standardization)**：对齐前对各项特征执行 $X_{norm} = (X - \mu) / \sigma$，防止高绝对值的特征在网络前向传播中形成梯度主导。
-* **输出结构**：拼接生成双塔网络的独立输入张量 $X_{v1}, X_{v2} \in \mathbb{R}^{T \times D}$（其中 $T$ 为时间步序列长度，$D$ 为对齐后的混合特征维度）。
+这份索引页按“先看什么、再看什么”的顺序组织当前 `docs/` 目录，方便从总览一路跳到数据、模型、标签和结果细节。
 
-### 3. Siamese 网络主干搭建 (1D-CNN + Attention Pooling)
-* **前提条件**：程序生命周期混合了多个阶段，网络需要自行识别并聚焦于决定性能差异的核心热点循环（Hot Loops）。
-* **操作机制**： 
-  * **局部特征提取**：将 $X_{v1}$ 和 $X_{v2}$ 分别输入共享权重的多层 1D-CNN，提取时序上相邻的微架构阻力特征矩阵 $H \in \mathbb{R}^{T \times F}$。
-  * **注意力降维 (Attention Pooling)**：引入可学习的注意力层，计算各个时间步的重要性权重 $A = \text{Softmax}(W_{att} H^T)$。
-  * **特征加权聚合**：将时间步特征按权重求和得到定长向量 $V = \sum_{t=1}^T A_t H_t$，从而在保留阶段差异的同时跨越了物理吞吐率不同导致的相位错位。
+## 快速入口
 
-### 4. 连续空间映射与鲁棒梯度驱动 (Loss Computation)
-* **前提条件**：网络需要拟合连续的性能提升比例，同时必须抵抗由操作系统调度、中断等引发的非编译级吞吐量噪声。
-* **操作机制**：
-  * 将两个版本的聚合特征向量相减或拼接（如 $\Delta V = V_{v1} - V_{v2}$），输入多层感知机（MLP）。
-  * MLP 末端**不使用限制性激活函数**，直接输出预测的相对加速比连续标量 $\hat{Y} \in \mathbb{R}^+$。
-  * **鲁棒损失计算**：结合第一步生成的真实标签 $Y$，计算 Huber Loss：
-    当误差 $|\hat{Y} - Y| \le \delta$ 时，$L = \frac{1}{2}(\hat{Y} - Y)^2$；
-    当误差 $|\hat{Y} - Y| > \delta$ 时，$L = \delta |\hat{Y} - Y| - \frac{1}{2}\delta^2$。
-  * 反向传播更新 MLP、注意力层与 1D-CNN 权重。
+- 项目总览与运行方法： [../README.md](../README.md)
+- 仓库里的文档目录： [README.md](README.md)
+- 训练与数据集总览： [hardware-model-dataset.md](hardware-model-dataset.md)
+- 标签语义与三种构建脚本差异： [label-mechanisms.md](label-mechanisms.md)
+- 模型结构详解： [model-architecture.md](model-architecture.md)
 
-### 5. 推理与验证阶段（Inference / Validation）
-* **前提条件**：验证必须在同构工作负载的配对版本间进行。
-* **输出变量**：一个单一的相对加速比预测值 $\hat{Y}$（标量）。
-* **机制与判断逻辑**：
-  * **物理含义**：预测值 $\hat{Y}$ 代表模型认为“版本 $v1$ 吞吐量是版本 $v2$ 吞吐量的多少倍”。
-  * 若 $\hat{Y} > 1.0$：模型判定 $v1$ 效率高于 $v2$，且偏离 $1.0$ 的幅度代表优势大小。
-  * 若 $\hat{Y} < 1.0$：模型判定 $v2$ 优于 $v1$。
+## 按主题阅读
+
+### 1. 系统与采集链路
+
+- PMU、LBR、特征工程全链路： [data-collection-feature-engineering.md](data-collection-feature-engineering.md)
+- BOLT 相关背景与生成流程： [bolt.md](bolt.md)
+- llvm-test-suite 数据来源与变体关系： [llvm-test-suite.md](llvm-test-suite.md)
+
+### 2. 数据集与标签
+
+- 三种标签机制、物理定义与脚本入口： [label-mechanisms.md](label-mechanisms.md)
+- 当前硬件前提、训练默认行为、六类变体来源： [hardware-model-dataset.md](hardware-model-dataset.md)
+
+### 3. 模型与算法
+
+- Siamese 架构、共享编码器、融合方式： [model-architecture.md](model-architecture.md)
+- 更偏算法表述的说明： [algorithm.md](algorithm.md)
+
+### 4. 结果与分析
+
+- 汇总后的 overall prediction accuracy： [overall-prediction-accuracy.md](overall-prediction-accuracy.md)
+
+## 图示与可视化
+
+`docs/diagrams/` 下保留了 Mermaid 源文件、SVG 和部分 HTML 可交互图。常用入口包括：
+
+- 前向链路交互图： [diagrams/forward_sequence.html](diagrams/forward_sequence.html)
+- 模型结构图： [diagrams/model-architecture.svg](diagrams/model-architecture.svg)
+- overall accuracy 热力图： [diagrams/overall-accuracy-best-heatmap.svg](diagrams/overall-accuracy-best-heatmap.svg)
+- Transformer 试验对比图： [diagrams/transformer-variant-accuracy.svg](diagrams/transformer-variant-accuracy.svg)
+
+## 推荐阅读顺序
+
+如果你是第一次接触这个仓库，建议按下面顺序阅读：
+
+1. 先看 [../README.md](../README.md) 了解代码入口、环境要求和训练/推理命令。
+2. 再看 [hardware-model-dataset.md](hardware-model-dataset.md) 了解当前默认训练行为、张量来源和六类变体。
+3. 接着看 [label-mechanisms.md](label-mechanisms.md) 和 [data-collection-feature-engineering.md](data-collection-feature-engineering.md)，把标签语义和输入特征对齐方式看清楚。
+4. 最后看 [model-architecture.md](model-architecture.md) 与 [overall-prediction-accuracy.md](overall-prediction-accuracy.md)，对应模型结构和最终结果。
+
+## 当前内置实验产物
+
+仓库根目录目前还保留了一组可以直接用于推理的 Transformer 固定时间实验产物：
+
+- 配置文件： [../configs/trans_best_time.json](../configs/trans_best_time.json)
+- checkpoint： [../checkpoints/trans_best_time.pt](../checkpoints/trans_best_time.pt)
+
+对应推理命令见 [../README.md](../README.md)。

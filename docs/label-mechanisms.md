@@ -215,3 +215,58 @@ $$
 - 固定时间回答的是“同样 30 秒，谁干得更多”。
 - 固定工作量回答的是“同样一份活，谁更早干完”。
 - 退役指令总数回答的是“同样 30 秒，谁让硬件退休了更多指令”。
+
+## 8. 三个构建脚本在代码层面的对应关系
+
+上面讲的是物理语义。落到当前仓库的实现时，这三种机制分别对应三个独立的张量构建入口，它们在“如何裁剪序列”和“最终写出哪些元数据”上也有差异。
+
+### 8.1 `build_dataset_fixedtime.py`
+
+固定时间入口会把两个版本都对齐到同一个固定序列长度 `seq_len`，默认 60 步。
+
+- 标签来源：`run_count`，即 `Y = N_v1 / N_v2`
+- 序列处理：截断或补零到统一长度
+- 长度张量：当前脚本也会保存 `len_v1.pt` / `len_v2.pt`，通常等于 `seq_len`
+- `stats.json`：保存 `mu`、`sigma`、`seq_len`、`v1`、`v2`
+
+这里的长度张量更多是为了和推理端的统一接口保持一致，而不是像固定工作量那样承载额外语义。
+
+### 8.2 `build_dataset_fixedwork.py`
+
+固定工作量入口的核心不是换一个标签公式，而是按共同工作量重算有效序列长度。
+
+- 参考工作量：`N_ref = min(N_v1, N_v2)`
+- 有效长度：`effective_len = round(T_raw * N_ref / N_i)`
+- 标签：`Y = T_v2 / T_v1`
+- 序列处理：先按 `effective_len` 截取有效区间，再补零到 `max_seq_len`
+- 长度张量：`len_v1.pt` / `len_v2.pt` 会被模型显式使用
+- `stats.json`：除归一化统计量外，还会写入 `mechanism = fixed_workload` 与 `label_semantics`
+
+因此，固定工作量模式里“序列长度本身带有性能信息”是实现的一部分，不只是文档解释。
+
+### 8.3 `build_dataset_instret.py`
+
+退役指令总数入口保留了固定时间的对齐方式，但把标签来源从 `run_count` 换成了硬件事件求和。
+
+- 标签来源：对所有有效行的 `inst_retired.any` 求和后取比值，即 `Y = Σinst_v1 / Σinst_v2`
+- 序列处理：和固定时间一样，统一到固定 `seq_len`
+- 长度张量：当前脚本同样会保存 `len_v1.pt` / `len_v2.pt`
+- `stats.json`：会写入 `mechanism = inst_retired_ratio` 与 `label_semantics`
+
+这意味着它的输入时序仍然是固定窗口视角，但标签解释已经完全切到“硬件退休指令吞吐”。
+
+### 8.4 为什么推理端还能共用一个入口
+
+`infer.py` 能统一处理这三种机制，靠的是每组张量目录都尽量维持一致的产物接口：
+
+- `X_v1.pt`
+- `X_v2.pt`
+- `Y.pt`
+- `len_v1.pt` / `len_v2.pt`
+- `programs.json`
+- `stats.json`
+
+其中：
+
+- 固定时间数据即使没有显式写入 `mechanism`，推理端也会把它按默认的 `fixed_time` 语义解释。
+- 固定工作量和退役指令总数数据则会直接从 `stats.json` 读取 `mechanism` 与 `label_semantics`，用于日志展示和结果解释。
